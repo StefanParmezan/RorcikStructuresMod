@@ -18,12 +18,12 @@ import java.util.Optional;
 public class StructureGenerator {
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    public static void generateHouse(ServerLevel level, BlockPos origin, String houseType) {
+    public static void generateHouse(ServerLevel level, BlockPos origin, String houseType, Rotation houseRotation) {
         long seed = calculateSeed(origin, houseType, level.getSeed());
-        generateHouse(level, origin, houseType, seed);
+        generateHouse(level, origin, houseType, seed, houseRotation);
     }
 
-    public static void generateHouse(ServerLevel level, BlockPos origin, String houseType, long seed) {
+    public static void generateHouse(ServerLevel level, BlockPos origin, String houseType, long seed, Rotation houseRotation) {
         houseType = houseType.toLowerCase();
         HouseConfig config = HouseConfigLoader.getConfig(houseType);
         if (config == null) {
@@ -31,16 +31,49 @@ public class StructureGenerator {
             return;
         }
 
+        LOGGER.info("=== GENERATION START ===");
+        LOGGER.info("House: {} rotation: {} degrees", houseType, houseRotation.ordinal() * 90);
+        LOGGER.info("Origin: {}", origin.toShortString());
+
         RandomSource random = RandomSource.create(seed);
+
+        int houseSizeX = config.size()[0];
+        int houseSizeY = config.size()[1];
+        int houseSizeZ = config.size()[2];
+        LOGGER.info("House size: {}x{}x{}", houseSizeX, houseSizeY, houseSizeZ);
+
         BlockPos houseOrigin = origin.offset(config.offset()[0], config.offset()[1], config.offset()[2]);
+        LOGGER.info("House origin (with offset): {}", houseOrigin.toShortString());
 
         int houseDecor = random.nextInt(5);
         String houseNbt = houseType + "_" + houseDecor;
-        LOGGER.info("House: {}", houseNbt);
-        placeStructure(level, houseOrigin, "rorcik_structures:houses/" + houseType + "/" + houseNbt, Rotation.NONE);
+        LOGGER.info("House NBT: {}", houseNbt);
+        placeStructure(level, houseOrigin, "rorcik_structures:houses/" + houseType + "/" + houseNbt, houseRotation);
 
         for (RoomSlot slot : config.rooms()) {
-            Rotation roomRotation = Rotation.values()[slot.rotation() / 90];
+            LOGGER.info("---");
+            LOGGER.info("Room slot: {} variant: {}", slot.nbt(), slot.variant());
+            LOGGER.info("Config position: [{}, {}, {}]", slot.position()[0], slot.position()[1], slot.position()[2]);
+            LOGGER.info("Config offset: [{}, {}, {}]", slot.offset()[0], slot.offset()[1], slot.offset()[2]);
+            LOGGER.info("Config rotation: {} degrees", slot.rotation());
+
+            int roomRotationDegrees = (slot.rotation() + houseRotation.ordinal() * 90) % 360;
+            Rotation roomRotation = Rotation.values()[roomRotationDegrees / 90];
+            LOGGER.info("Final room rotation: {} degrees", roomRotationDegrees);
+
+            int[] rotatedRoomPos = rotatePositionInHouse(
+                    slot.position()[0], slot.position()[1], slot.position()[2],
+                    houseRotation, houseSizeX, houseSizeZ
+            );
+            LOGGER.info("Rotated room position: [{}, {}, {}]",
+                    rotatedRoomPos[0], rotatedRoomPos[1], rotatedRoomPos[2]);
+
+            int[] rotatedRoomOffset = rotateOffset(
+                    slot.offset()[0], slot.offset()[1], slot.offset()[2],
+                    houseRotation
+            );
+            LOGGER.info("Rotated room offset (by house rotation): [{}, {}, {}]",
+                    rotatedRoomOffset[0], rotatedRoomOffset[1], rotatedRoomOffset[2]);
 
             for (int i = 0; i < slot.repeat(); i++) {
                 int floor = slot.startFloor() + i;
@@ -56,14 +89,39 @@ public class StructureGenerator {
                     roomNbt = slot.nbt() + "_" + decor + "_" + variant;
                 }
 
-                BlockPos roomOrigin = houseOrigin.offset(slot.position()[0], y, slot.position()[2]);
-                BlockPos adjustedOrigin = roomOrigin.offset(slot.offset()[0], slot.offset()[1], slot.offset()[2]);
+                BlockPos roomOrigin = houseOrigin.offset(
+                        rotatedRoomPos[0] + rotatedRoomOffset[0],
+                        y + rotatedRoomOffset[1],
+                        rotatedRoomPos[2] + rotatedRoomOffset[2]
+                );
 
-                LOGGER.info("Room: {} at floor {} position {}", roomNbt, floor, adjustedOrigin.toShortString());
+                LOGGER.info("Floor {}: y={}", floor, y);
+                LOGGER.info("Room origin: {}", roomOrigin.toShortString());
+                LOGGER.info("Room NBT: {}", roomNbt);
 
-                placeStructure(level, adjustedOrigin, "rorcik_structures:rooms/" + houseType + "/" + roomNbt, roomRotation);
+                placeStructure(level, roomOrigin, "rorcik_structures:rooms/" + houseType + "/" + roomNbt, roomRotation);
             }
         }
+
+        LOGGER.info("=== GENERATION END ===");
+    }
+
+    private static int[] rotatePositionInHouse(int x, int y, int z, Rotation rotation, int houseSizeX, int houseSizeZ) {
+        return switch (rotation) {
+            case NONE -> new int[]{x, y, z};
+            case CLOCKWISE_90 -> new int[]{houseSizeZ - 1 - z, y, x};
+            case CLOCKWISE_180 -> new int[]{houseSizeX - 1 - x, y, houseSizeZ - 1 - z};
+            case COUNTERCLOCKWISE_90 -> new int[]{z, y, houseSizeX - 1 - x};
+        };
+    }
+
+    private static int[] rotateOffset(int x, int y, int z, Rotation rotation) {
+        return switch (rotation) {
+            case NONE -> new int[]{x, y, z};
+            case CLOCKWISE_90 -> new int[]{-z, y, x};
+            case CLOCKWISE_180 -> new int[]{-x, y, -z};
+            case COUNTERCLOCKWISE_90 -> new int[]{z, y, -x};
+        };
     }
 
     private static long calculateSeed(BlockPos origin, String houseType, long worldSeed) {
