@@ -24,9 +24,10 @@ public class StructureGenerator {
     }
 
     public static void generateHouse(ServerLevel level, BlockPos origin, String houseType, long seed) {
+        houseType = houseType.toLowerCase();
         HouseConfig config = HouseConfigLoader.getConfig(houseType);
         if (config == null) {
-            LOGGER.error("House config not found: {}", houseType);
+            LOGGER.error("Config not found: {}", houseType);
             return;
         }
 
@@ -34,8 +35,9 @@ public class StructureGenerator {
         BlockPos houseOrigin = origin.offset(config.offset()[0], config.offset()[1], config.offset()[2]);
 
         int houseDecor = random.nextInt(5);
-        String houseNbt = "rorcik_structures:structures/houses/" + houseType + "/" + houseType + "_" + houseDecor;
-        placeStructure(level, houseOrigin, houseNbt, Rotation.NONE);
+        String houseNbt = houseType + "_" + houseDecor;
+        LOGGER.info("House: {}", houseNbt);
+        placeStructure(level, houseOrigin, "rorcik_structures:houses/" + houseType + "/" + houseNbt, Rotation.NONE);
 
         for (RoomSlot slot : config.rooms()) {
             Rotation roomRotation = Rotation.values()[slot.rotation() / 90];
@@ -45,12 +47,21 @@ public class StructureGenerator {
                 int y = config.firstFloorOffset() + (floor * config.floorHeight());
 
                 int decor = random.nextInt(5);
-                String roomNbt = "rorcik_structures:structures/rooms/" + houseType + "/" + slot.nbt() + slot.variant() + "_" + decor;
+                String variant = slot.variant();
+
+                String roomNbt;
+                if (variant.isEmpty()) {
+                    roomNbt = slot.nbt() + "_" + decor;
+                } else {
+                    roomNbt = slot.nbt() + "_" + decor + "_" + variant;
+                }
 
                 BlockPos roomOrigin = houseOrigin.offset(slot.position()[0], y, slot.position()[2]);
                 BlockPos adjustedOrigin = roomOrigin.offset(slot.offset()[0], slot.offset()[1], slot.offset()[2]);
 
-                placeStructure(level, adjustedOrigin, roomNbt, roomRotation);
+                LOGGER.info("Room: {} at floor {} position {}", roomNbt, floor, adjustedOrigin.toShortString());
+
+                placeStructure(level, adjustedOrigin, "rorcik_structures:rooms/" + houseType + "/" + roomNbt, roomRotation);
             }
         }
     }

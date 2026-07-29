@@ -11,11 +11,15 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import org.slf4j.Logger;
+import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.RorcikStructuresMod;
 import ru.rorcik.structures.generator.StructureGenerator;
 
 @Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ModCommands {
+    private static final Logger LOGGER = LogUtils.getLogger();
+
     public static void register() {
     }
 
@@ -31,6 +35,8 @@ public class ModCommands {
                                     ServerLevel level = ctx.getSource().getLevel();
                                     BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
 
+                                    LOGGER.info("Generating house type: {}", type);
+
                                     StructureGenerator.generateHouse(level, pos, type);
 
                                     ctx.getSource().sendSuccess(() ->
@@ -43,6 +49,8 @@ public class ModCommands {
                                             long seed = LongArgumentType.getLong(ctx, "seed");
                                             ServerLevel level = ctx.getSource().getLevel();
                                             BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
+
+                                            LOGGER.info("Generating house type: {} with seed: {}", type, seed);
 
                                             StructureGenerator.generateHouse(level, pos, type, seed);
 
