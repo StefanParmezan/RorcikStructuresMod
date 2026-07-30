@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
@@ -19,11 +20,14 @@ public class StructureGenerator {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     public static void generateHouse(ServerLevel level, BlockPos origin, String houseType, Rotation houseRotation) {
-        long seed = calculateSeed(origin, houseType, level.getSeed());
-        generateHouse(level, origin, houseType, seed, houseRotation);
+        generateHouse(level, origin, houseType, level.getSeed(), houseRotation, -1);
     }
 
-    public static void generateHouse(ServerLevel level, BlockPos origin, String houseType, long seed, Rotation houseRotation) {
+    public static void generateHouse(ServerLevel level, BlockPos origin, String houseType, Rotation houseRotation, int forcedDecor) {
+        generateHouse(level, origin, houseType, level.getSeed(), houseRotation, forcedDecor);
+    }
+
+    private static void generateHouse(ServerLevel level, BlockPos origin, String houseType, long seed, Rotation houseRotation, int forcedDecor) {
         houseType = houseType.toLowerCase();
         HouseConfig config = HouseConfigLoader.getConfig(houseType);
         if (config == null) {
@@ -48,18 +52,19 @@ public class StructureGenerator {
         BlockPos housePlacementOrigin = getCompensatedOrigin(houseOrigin, houseRotation, houseSizeX, houseSizeZ);
         LOGGER.info("Compensated house placement origin: {}", housePlacementOrigin.toShortString());
 
-        int houseDecor = random.nextInt(5);
+        int houseDecor = (forcedDecor >= 0) ? forcedDecor : random.nextInt(config.houseDecorCount());
         String houseNbt = houseType + "_" + houseDecor;
-        LOGGER.info("House NBT: {}", houseNbt);
+        LOGGER.info("House NBT: {} (decor count: {})", houseNbt, config.houseDecorCount());
 
-        placeStructure(level, housePlacementOrigin, "rorcik_structures:houses/" + houseType + "/" + houseNbt, houseRotation);
+        placeStructure(level, housePlacementOrigin, "rorcik_structures:houses/" + houseType + "/" + houseNbt, houseRotation, false, false);
 
         for (RoomSlot slot : config.rooms()) {
             LOGGER.info("---");
-            LOGGER.info("Room slot: {} variant: {}", slot.nbt(), slot.variant());
+            LOGGER.info("Room slot: {} variant: {} (decor count: {})", slot.nbt(), slot.variant(), slot.decorCount());
             LOGGER.info("Config position: [{}, {}, {}]", slot.position()[0], slot.position()[1], slot.position()[2]);
             LOGGER.info("Config offset: [{}, {}, {}]", slot.offset()[0], slot.offset()[1], slot.offset()[2]);
             LOGGER.info("Config rotation: {} degrees", slot.rotation());
+            LOGGER.info("Mirror: X={}, Z={}", slot.mirrorX(), slot.mirrorZ());
 
             int roomRotationDegrees = (slot.rotation() + houseRotation.ordinal() * 90) % 360;
             Rotation roomRotation = Rotation.values()[roomRotationDegrees / 90];
@@ -83,7 +88,7 @@ public class StructureGenerator {
                 int floor = slot.startFloor() + i;
                 int y = config.firstFloorOffset() + (floor * config.floorHeight());
 
-                int decor = random.nextInt(5);
+                int decor = random.nextInt(slot.decorCount());
                 String variant = slot.variant();
 
                 String roomNbt;
@@ -103,7 +108,7 @@ public class StructureGenerator {
                 LOGGER.info("Room StructureBlock origin: {}", roomOrigin.toShortString());
                 LOGGER.info("Room NBT: {}", roomNbt);
 
-                placeStructure(level, roomOrigin, "rorcik_structures:rooms/" + houseType + "/" + roomNbt, roomRotation);
+                placeStructure(level, roomOrigin, "rorcik_structures:rooms/" + houseType + "/" + roomNbt, roomRotation, slot.mirrorX(), slot.mirrorZ());
             }
         }
 
@@ -137,14 +142,7 @@ public class StructureGenerator {
         };
     }
 
-    private static long calculateSeed(BlockPos origin, String houseType, long worldSeed) {
-        return worldSeed
-                ^ (origin.getX() * 341873128712L)
-                ^ (origin.getZ() * 132897987541L)
-                ^ houseType.hashCode();
-    }
-
-    private static void placeStructure(ServerLevel level, BlockPos origin, String nbtPath, Rotation rotation) {
+    private static void placeStructure(ServerLevel level, BlockPos origin, String nbtPath, Rotation rotation, boolean mirrorX, boolean mirrorZ) {
         ResourceLocation location = ResourceLocation.tryParse(nbtPath);
         if (location == null) {
             LOGGER.error("Invalid resource location: {}", nbtPath);
@@ -162,6 +160,15 @@ public class StructureGenerator {
         StructurePlaceSettings settings = new StructurePlaceSettings()
                 .setRotation(rotation)
                 .setKnownShape(true);
+
+        if (mirrorX && mirrorZ) {
+            settings.setMirror(Mirror.LEFT_RIGHT);
+            origin = origin.offset(0, 0, template.getSize().getZ() - 1);
+        } else if (mirrorX) {
+            settings.setMirror(Mirror.LEFT_RIGHT);
+        } else if (mirrorZ) {
+            settings.setMirror(Mirror.FRONT_BACK);
+        }
 
         BlockPos size = new BlockPos(template.getSize());
         template.placeInWorld(level, origin, origin.offset(size), settings, level.getRandom(), 3);

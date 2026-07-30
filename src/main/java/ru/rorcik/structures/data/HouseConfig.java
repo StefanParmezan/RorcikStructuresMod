@@ -8,5 +8,6 @@ public record HouseConfig(
         int[] size,
         int floorHeight,
         int firstFloorOffset,
+        int houseDecorCount,
         List<RoomSlot> rooms
 ) {}
