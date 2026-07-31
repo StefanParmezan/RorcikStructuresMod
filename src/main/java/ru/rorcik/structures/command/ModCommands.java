@@ -83,5 +83,42 @@ public class ModCommands {
                                 )
                         )
         );
+
+        dispatcher.register(
+                Commands.literal("testrooms")
+                        .then(Commands.argument("type", StringArgumentType.word())
+                                .executes(ctx -> {
+                                    String type = StringArgumentType.getString(ctx, "type");
+                                    ServerLevel level = ctx.getSource().getLevel();
+                                    BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
+
+                                    LOGGER.info("Generating rooms only for house type: {}", type);
+
+                                    StructureGenerator.generateRoomsOnly(level, pos, type, Rotation.NONE);
+
+                                    ctx.getSource().sendSuccess(() ->
+                                            Component.literal("Generating rooms only for house type " + type + " at " + pos.toShortString()), true);
+                                    return 1;
+                                })
+                                .then(Commands.argument("rotation", IntegerArgumentType.integer(0, 3))
+                                        .executes(ctx -> {
+                                            String type = StringArgumentType.getString(ctx, "type");
+                                            int rotValue = IntegerArgumentType.getInteger(ctx, "rotation");
+                                            Rotation rotation = Rotation.values()[rotValue];
+                                            ServerLevel level = ctx.getSource().getLevel();
+                                            BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
+
+                                            LOGGER.info("Generating rooms only for house type: {} with rotation: {} degrees",
+                                                    type, rotValue * 90);
+
+                                            StructureGenerator.generateRoomsOnly(level, pos, type, rotation);
+
+                                            ctx.getSource().sendSuccess(() ->
+                                                    Component.literal("Generating rooms only for house type " + type + " with rotation " + (rotValue * 90) + " degrees"), true);
+                                            return 1;
+                                        })
+                                )
+                        )
+        );
     }
 }

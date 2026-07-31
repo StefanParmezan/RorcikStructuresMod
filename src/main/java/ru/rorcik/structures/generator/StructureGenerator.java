@@ -27,6 +27,10 @@ public class StructureGenerator {
         generateHouse(level, origin, houseType, level.getSeed(), houseRotation, forcedDecor);
     }
 
+    public static void generateRoomsOnly(ServerLevel level, BlockPos origin, String houseType, Rotation houseRotation) {
+        generateRoomsOnly(level, origin, houseType, level.getSeed(), houseRotation);
+    }
+
     private static void generateHouse(ServerLevel level, BlockPos origin, String houseType, long seed, Rotation houseRotation, int forcedDecor) {
         houseType = houseType.toLowerCase();
         HouseConfig config = HouseConfigLoader.getConfig(houseType);
@@ -57,6 +61,42 @@ public class StructureGenerator {
         LOGGER.info("House NBT: {} (decor count: {})", houseNbt, config.houseDecorCount());
 
         placeStructure(level, housePlacementOrigin, "rorcik_structures:houses/" + houseType + "/" + houseNbt, houseRotation, false, false);
+
+        generateRooms(level, config, houseOrigin, houseRotation, random);
+
+        LOGGER.info("=== GENERATION END ===");
+    }
+
+    private static void generateRoomsOnly(ServerLevel level, BlockPos origin, String houseType, long seed, Rotation houseRotation) {
+        houseType = houseType.toLowerCase();
+        HouseConfig config = HouseConfigLoader.getConfig(houseType);
+        if (config == null) {
+            LOGGER.error("Config not found: {}", houseType);
+            return;
+        }
+
+        LOGGER.info("=== ROOMS ONLY GENERATION START ===");
+        LOGGER.info("House: {} rotation: {} degrees", houseType, houseRotation.ordinal() * 90);
+        LOGGER.info("Command origin: {}", origin.toShortString());
+
+        RandomSource random = RandomSource.create(seed);
+
+        int houseSizeX = config.size()[0];
+        int houseSizeY = config.size()[1];
+        int houseSizeZ = config.size()[2];
+        LOGGER.info("House size: {}x{}x{}", houseSizeX, houseSizeY, houseSizeZ);
+
+        BlockPos houseOrigin = origin.offset(config.offset()[0], config.offset()[1], config.offset()[2]);
+        LOGGER.info("Fixed house anchor: {}", houseOrigin.toShortString());
+
+        generateRooms(level, config, houseOrigin, houseRotation, random);
+
+        LOGGER.info("=== ROOMS ONLY GENERATION END ===");
+    }
+
+    private static void generateRooms(ServerLevel level, HouseConfig config, BlockPos houseOrigin, Rotation houseRotation, RandomSource random) {
+        int houseSizeX = config.size()[0];
+        int houseSizeZ = config.size()[2];
 
         for (RoomSlot slot : config.rooms()) {
             LOGGER.info("---");
@@ -108,11 +148,9 @@ public class StructureGenerator {
                 LOGGER.info("Room StructureBlock origin: {}", roomOrigin.toShortString());
                 LOGGER.info("Room NBT: {}", roomNbt);
 
-                placeStructure(level, roomOrigin, "rorcik_structures:rooms/" + houseType + "/" + roomNbt, roomRotation, slot.mirrorX(), slot.mirrorZ());
+                placeStructure(level, roomOrigin, "rorcik_structures:rooms/" + config.type() + "/" + roomNbt, roomRotation, slot.mirrorX(), slot.mirrorZ());
             }
         }
-
-        LOGGER.info("=== GENERATION END ===");
     }
 
     private static BlockPos getCompensatedOrigin(BlockPos targetOrigin, Rotation rotation, int sizeX, int sizeZ) {
