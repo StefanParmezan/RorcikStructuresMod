@@ -12,8 +12,9 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
-import ru.rorcik.structures.RorcikStructuresMod;
-import ru.rorcik.structures.config.StructuresConfig;
+import ru.rorcik.structures.common.RorcikStructuresMod;
+import ru.rorcik.structures.common.RorcikStructuresModConfig;
+import ru.rorcik.structures.common.ModPaths;
 
 import java.io.InputStream;
 import java.util.Collections;
@@ -30,7 +31,7 @@ public class StructureCache {
         Map<ResourceLocation, CompoundTag> tempCache = new HashMap<>();
 
         Map<ResourceLocation, Resource> allStructures = resourceManager.listResources(
-                "structures",
+                ModPaths.STRUCTURES_BASE,
                 path -> path.getNamespace().equals(RorcikStructuresMod.MODID) && path.getPath().endsWith(".nbt")
         );
 
@@ -39,8 +40,8 @@ public class StructureCache {
             try (InputStream stream = entry.getValue().open()) {
                 CompoundTag nbt = NbtIo.readCompressed(stream);
                 String path = location.getPath();
-                if (path.startsWith("structures/")) {
-                    path = path.substring("structures/".length());
+                if (path.startsWith(ModPaths.STRUCTURES_BASE + "/")) {
+                    path = path.substring((ModPaths.STRUCTURES_BASE + "/").length());
                 }
                 if (path.endsWith(".nbt")) {
                     path = path.substring(0, path.length() - 4);
@@ -69,7 +70,7 @@ public class StructureCache {
     }
 
     public static Optional<StructureTemplate> get(ResourceLocation location) {
-        if (StructuresConfig.useCaching) {
+        if (RorcikStructuresModConfig.useCaching) {
             boolean found = COMPILED_CACHE.containsKey(location);
         }
         return Optional.ofNullable(COMPILED_CACHE.get(location));

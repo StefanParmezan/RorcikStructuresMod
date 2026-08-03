@@ -1,4 +1,4 @@
-package ru.rorcik.structures.command;
+package ru.rorcik.structures.common;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -14,8 +14,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
-import ru.rorcik.structures.RorcikStructuresMod;
-import ru.rorcik.structures.generator.StructureGenerator;
+import ru.rorcik.structures.generation.city.plains.HouseGenerator;
 
 @Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ModCommands {
@@ -38,7 +37,7 @@ public class ModCommands {
 
                                     LOGGER.info("Generating house type: {} with random decor", type);
 
-                                    StructureGenerator.generateHouse(level, pos, type, Rotation.NONE);
+                                    HouseGenerator.generateHouse(level, pos, type, Rotation.NONE);
 
                                     ctx.getSource().sendSuccess(() ->
                                             Component.literal("Generating house type " + type + " at " + pos.toShortString()), true);
@@ -55,7 +54,7 @@ public class ModCommands {
                                             LOGGER.info("Generating house type: {} with rotation: {} degrees and random decor",
                                                     type, rotValue * 90);
 
-                                            StructureGenerator.generateHouse(level, pos, type, rotation);
+                                            HouseGenerator.generateHouse(level, pos, type, rotation);
 
                                             ctx.getSource().sendSuccess(() ->
                                                     Component.literal("Generating house type " + type + " with rotation " + (rotValue * 90) + " degrees"), true);
@@ -73,7 +72,7 @@ public class ModCommands {
                                                     LOGGER.info("Generating house type: {} with rotation: {} degrees and forced decor: {}",
                                                             type, rotValue * 90, decor);
 
-                                                    StructureGenerator.generateHouse(level, pos, type, rotation, decor);
+                                                    HouseGenerator.generateHouse(level, pos, type, rotation, decor);
 
                                                     ctx.getSource().sendSuccess(() ->
                                                             Component.literal("Generating house type " + type + " with rotation " + (rotValue * 90) + " degrees and decor " + decor), true);
@@ -94,7 +93,7 @@ public class ModCommands {
 
                                     LOGGER.info("Generating rooms only for house type: {}", type);
 
-                                    StructureGenerator.generateRoomsOnly(level, pos, type, Rotation.NONE);
+                                    HouseGenerator.generateRoomsOnly(level, pos, type, Rotation.NONE);
 
                                     ctx.getSource().sendSuccess(() ->
                                             Component.literal("Generating rooms only for house type " + type + " at " + pos.toShortString()), true);
@@ -111,7 +110,7 @@ public class ModCommands {
                                             LOGGER.info("Generating rooms only for house type: {} with rotation: {} degrees",
                                                     type, rotValue * 90);
 
-                                            StructureGenerator.generateRoomsOnly(level, pos, type, rotation);
+                                            HouseGenerator.generateRoomsOnly(level, pos, type, rotation);
 
                                             ctx.getSource().sendSuccess(() ->
                                                     Component.literal("Generating rooms only for house type " + type + " with rotation " + (rotValue * 90) + " degrees"), true);

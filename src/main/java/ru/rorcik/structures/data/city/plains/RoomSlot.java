@@ -1,4 +1,4 @@
-package ru.rorcik.structures.data;
+package ru.rorcik.structures.data.city.plains;
 
 public record RoomSlot(
         String nbt,

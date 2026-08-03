@@ -1,4 +1,4 @@
-package ru.rorcik.structures.data;
+package ru.rorcik.structures.data.city.plains;
 
 import java.util.List;
 

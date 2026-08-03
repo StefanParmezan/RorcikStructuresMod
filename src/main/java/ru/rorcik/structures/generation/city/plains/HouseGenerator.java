@@ -1,4 +1,4 @@
-package ru.rorcik.structures.generator;
+package ru.rorcik.structures.generation.city.plains;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
@@ -11,15 +11,15 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlac
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
-import ru.rorcik.structures.RorcikStructuresMod;
-import ru.rorcik.structures.data.HouseConfigLoader;
+import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.data.city.plains.HouseConfigLoader;
 import ru.rorcik.structures.data.StructureCache;
-import ru.rorcik.structures.data.HouseConfig;
-import ru.rorcik.structures.data.RoomSlot;
+import ru.rorcik.structures.data.city.plains.HouseConfig;
+import ru.rorcik.structures.data.city.plains.RoomSlot;
 
 import java.util.Optional;
 
-public class StructureGenerator {
+public class HouseGenerator {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     public static void generateHouse(ServerLevel level, BlockPos origin, String houseType, Rotation houseRotation) {
@@ -55,7 +55,7 @@ public class StructureGenerator {
         int houseDecor = (forcedDecor >= 0) ? forcedDecor : random.nextInt(config.houseDecorCount());
         String houseNbt = houseType + "_" + houseDecor;
 
-        placeStructure(level, housePlacementOrigin, RorcikStructuresMod.MODID + ":houses/" + houseType + "/" + houseNbt, houseRotation, false, false);
+        placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseType, houseNbt), houseRotation, false, false);
 
         generateRooms(level, config, houseOrigin, houseRotation, random);
 
@@ -124,7 +124,7 @@ public class StructureGenerator {
                         rotatedRoomPos[2] + rotatedRoomOffset[2]
                 );
 
-                placeStructure(level, roomOrigin, RorcikStructuresMod.MODID + ":rooms/" + config.type() + "/" + roomNbt, roomRotation, slot.mirrorX(), slot.mirrorZ());
+                placeStructure(level, roomOrigin, ModPaths.roomNbtPath(config.type(), roomNbt), roomRotation, slot.mirrorX(), slot.mirrorZ());
             }
         }
     }

@@ -8,7 +8,8 @@ import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import ru.rorcik.structures.RorcikStructuresMod;
+import ru.rorcik.structures.common.RorcikStructuresMod;
+import ru.rorcik.structures.data.city.plains.HouseConfigLoader;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;

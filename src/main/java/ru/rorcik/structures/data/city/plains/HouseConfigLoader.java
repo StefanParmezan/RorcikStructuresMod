@@ -1,4 +1,4 @@
-package ru.rorcik.structures.data;
+package ru.rorcik.structures.data.city.plains;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -7,6 +7,7 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
+import ru.rorcik.structures.common.ModPaths;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -24,7 +25,7 @@ public class HouseConfigLoader {
     public static void loadConfigs(ResourceManager resourceManager) {
         CONFIGS.clear();
 
-        resourceManager.listResources("configs/houses", path -> path.getPath().endsWith(".json"))
+        resourceManager.listResources(ModPaths.CONFIGS_CITIES_PLAINS_HOUSES, path -> path.getPath().endsWith(".json"))
                 .forEach((location, resource) -> {
                     try (InputStream stream = resource.open();
                          InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
@@ -81,7 +82,7 @@ public class HouseConfigLoader {
     private static int countHouseDecorations(ResourceManager resourceManager, String houseType) {
         int maxDecor = -1;
         Map<ResourceLocation, Resource> resources = resourceManager.listResources(
-                "structures/houses/" + houseType,
+                ModPaths.STRUCTURES_CITIES_PLAINS_HOUSES + "/" + houseType,
                 path -> path.getPath().endsWith(".nbt")
         );
 
@@ -103,7 +104,7 @@ public class HouseConfigLoader {
     private static int countRoomDecorations(ResourceManager resourceManager, String houseType, String roomNbt) {
         int maxDecor = -1;
         Map<ResourceLocation, Resource> resources = resourceManager.listResources(
-                "structures/rooms/" + houseType,
+                ModPaths.STRUCTURES_CITIES_PLAINS_ROOMS + "/" + houseType,
                 path -> path.getPath().endsWith(".nbt") && path.getPath().contains(roomNbt + "_")
         );
 

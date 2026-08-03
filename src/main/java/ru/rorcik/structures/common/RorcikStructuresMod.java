@@ -1,4 +1,4 @@
-package ru.rorcik.structures;
+package ru.rorcik.structures.common;
 
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.common.MinecraftForge;
@@ -8,7 +8,6 @@ import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.slf4j.Logger;
-import ru.rorcik.structures.config.StructuresConfig;
 
 @Mod(RorcikStructuresMod.MODID)
 public class RorcikStructuresMod {
@@ -19,7 +18,7 @@ public class RorcikStructuresMod {
         IEventBus modEventBus = context.getModEventBus();
         modEventBus.addListener(this::commonSetup);
         MinecraftForge.EVENT_BUS.register(this);
-        context.registerConfig(ModConfig.Type.COMMON, StructuresConfig.SPEC);
+        context.registerConfig(ModConfig.Type.COMMON, RorcikStructuresModConfig.SPEC);
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
