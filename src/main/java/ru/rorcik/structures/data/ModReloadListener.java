@@ -10,6 +10,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.city.plains.HouseConfigLoader;
+import ru.rorcik.structures.data.city.plains.RoadConfigLoader;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -31,6 +32,7 @@ public class ModReloadListener {
     public static void onServerStopping(ServerStoppingEvent event) {
         StructureCache.clear();
         HouseConfigLoader.clear();
+        RoadConfigLoader.clear();
     }
 
     private static class StructureDataReloader implements PreparableReloadListener {
@@ -45,6 +47,7 @@ public class ModReloadListener {
         ) {
             return CompletableFuture.runAsync(() -> {
                 HouseConfigLoader.loadConfigs(resourceManager);
+                RoadConfigLoader.loadConfigs(resourceManager);
                 StructureCache.loadRawNbt(resourceManager);
             }, backgroundExecutor).thenCompose(preparationBarrier::wait);
         }

@@ -1,0 +1,7 @@
+{
+  "type": "c",
+  "offset": [0, -3, 0],
+  "size": [64, 64, 64],
+  "decorCount": 3,
+  "connections": ["NORTH", "WEST"]
+}

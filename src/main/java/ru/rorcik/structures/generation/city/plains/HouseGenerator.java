@@ -1,23 +1,17 @@
 package ru.rorcik.structures.generation.city.plains;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.ModPaths;
 import ru.rorcik.structures.data.city.plains.HouseConfigLoader;
-import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.city.plains.HouseConfig;
 import ru.rorcik.structures.data.city.plains.RoomSlot;
-
-import java.util.Optional;
+import ru.rorcik.structures.generation.StructureUtils;
 
 public class HouseGenerator {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -50,12 +44,12 @@ public class HouseGenerator {
         int houseSizeZ = config.size()[2];
 
         BlockPos houseOrigin = origin.offset(config.offset()[0], config.offset()[1], config.offset()[2]);
-        BlockPos housePlacementOrigin = getCompensatedOrigin(houseOrigin, houseRotation, houseSizeX, houseSizeZ);
+        BlockPos housePlacementOrigin = StructureUtils.getCompensatedOrigin(houseOrigin, houseRotation, houseSizeX, houseSizeZ);
 
         int houseDecor = (forcedDecor >= 0) ? forcedDecor : random.nextInt(config.houseDecorCount());
         String houseNbt = houseType + "_" + houseDecor;
 
-        placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseType, houseNbt), houseRotation, false, false);
+        StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseType, houseNbt), houseRotation, false, false);
 
         generateRooms(level, config, houseOrigin, houseRotation, random);
 
@@ -94,12 +88,12 @@ public class HouseGenerator {
             int roomRotationDegrees = (slot.rotation() + houseRotation.ordinal() * 90) % 360;
             Rotation roomRotation = Rotation.values()[roomRotationDegrees / 90];
 
-            int[] rotatedRoomPos = rotatePositionInHouse(
+            int[] rotatedRoomPos = StructureUtils.rotatePositionInStructure(
                     slot.position()[0], slot.position()[1], slot.position()[2],
                     houseRotation, houseSizeX, houseSizeZ
             );
 
-            int[] rotatedRoomOffset = rotateOffset(
+            int[] rotatedRoomOffset = StructureUtils.rotateOffset(
                     slot.offset()[0], slot.offset()[1], slot.offset()[2],
                     houseRotation
             );
@@ -124,7 +118,7 @@ public class HouseGenerator {
                         rotatedRoomPos[2] + rotatedRoomOffset[2]
                 );
 
-                placeStructure(level, roomOrigin, ModPaths.roomNbtPath(config.type(), roomNbt), roomRotation, slot.mirrorX(), slot.mirrorZ());
+                StructureUtils.placeStructure(level, roomOrigin, ModPaths.roomNbtPath(config.type(), roomNbt), roomRotation, slot.mirrorX(), slot.mirrorZ());
             }
         }
     }
@@ -139,65 +133,5 @@ public class HouseGenerator {
                 }
             }
         }
-    }
-
-    private static BlockPos getCompensatedOrigin(BlockPos targetOrigin, Rotation rotation, int sizeX, int sizeZ) {
-        return switch (rotation) {
-            case NONE -> targetOrigin;
-            case CLOCKWISE_90 -> targetOrigin.offset(sizeZ - 1, 0, 0);
-            case CLOCKWISE_180 -> targetOrigin.offset(sizeX - 1, 0, sizeZ - 1);
-            case COUNTERCLOCKWISE_90 -> targetOrigin.offset(0, 0, sizeX - 1);
-        };
-    }
-
-    private static int[] rotatePositionInHouse(int x, int y, int z, Rotation rotation, int houseSizeX, int houseSizeZ) {
-        return switch (rotation) {
-            case NONE -> new int[]{x, y, z};
-            case CLOCKWISE_90 -> new int[]{houseSizeZ - 1 - z, y, x};
-            case CLOCKWISE_180 -> new int[]{houseSizeX - 1 - x, y, houseSizeZ - 1 - z};
-            case COUNTERCLOCKWISE_90 -> new int[]{z, y, houseSizeX - 1 - x};
-        };
-    }
-
-    private static int[] rotateOffset(int x, int y, int z, Rotation rotation) {
-        return switch (rotation) {
-            case NONE -> new int[]{x, y, z};
-            case CLOCKWISE_90 -> new int[]{-z, y, x};
-            case CLOCKWISE_180 -> new int[]{-x, y, -z};
-            case COUNTERCLOCKWISE_90 -> new int[]{z, y, -x};
-        };
-    }
-
-    private static void placeStructure(ServerLevel level, BlockPos origin, String nbtPath, Rotation rotation, boolean mirrorX, boolean mirrorZ) {
-        ResourceLocation location = ResourceLocation.tryParse(nbtPath);
-        if (location == null) {
-            LOGGER.error("Invalid resource location: {}", nbtPath);
-            return;
-        }
-
-        Optional<StructureTemplate> templateOpt = StructureCache.get(location);
-        if (templateOpt.isEmpty()) {
-            LOGGER.error("Structure not found in cache: {}", nbtPath);
-            return;
-        }
-
-        StructureTemplate template = templateOpt.get();
-        StructurePlaceSettings settings = new StructurePlaceSettings()
-                .setRotation(rotation)
-                .setKnownShape(true)
-                .setIgnoreEntities(false);
-
-        if (mirrorX && mirrorZ) {
-            settings.setMirror(Mirror.LEFT_RIGHT);
-            origin = origin.offset(0, 0, template.getSize().getZ() - 1);
-        } else if (mirrorX) {
-            settings.setMirror(Mirror.LEFT_RIGHT);
-        } else if (mirrorZ) {
-            settings.setMirror(Mirror.FRONT_BACK);
-        }
-
-        BlockPos size = new BlockPos(template.getSize());
-
-        template.placeInWorld(level, origin, origin.offset(size), settings, level.getRandom(), 18);
     }
 }

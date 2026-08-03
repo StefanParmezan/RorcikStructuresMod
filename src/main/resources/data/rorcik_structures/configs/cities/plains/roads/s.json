@@ -1,0 +1,8 @@
+{
+  "type": "s",
+  "offset": [0, -3, 0],
+  "size": [64, 64, 64],
+  "decorCount": 6,
+  "connections": ["NORTH", "SOUTH"],
+  "stopVariants": [0, 3]
+}
