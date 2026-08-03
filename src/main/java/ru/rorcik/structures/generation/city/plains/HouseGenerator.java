@@ -43,7 +43,11 @@ public class HouseGenerator {
         int houseSizeY = config.size()[1];
         int houseSizeZ = config.size()[2];
 
-        BlockPos houseOrigin = origin.offset(config.offset()[0], config.offset()[1], config.offset()[2]);
+        BlockPos houseOrigin = origin.offset(
+                config.offset()[0] - 1,
+                config.offset()[1] - 1,
+                config.offset()[2] - 1
+        );
         BlockPos housePlacementOrigin = StructureUtils.getCompensatedOrigin(houseOrigin, houseRotation, houseSizeX, houseSizeZ);
 
         int houseDecor = (forcedDecor >= 0) ? forcedDecor : random.nextInt(config.houseDecorCount());
@@ -72,7 +76,11 @@ public class HouseGenerator {
         int houseSizeY = config.size()[1];
         int houseSizeZ = config.size()[2];
 
-        BlockPos houseOrigin = origin.offset(config.offset()[0], config.offset()[1], config.offset()[2]);
+        BlockPos houseOrigin = origin.offset(
+                config.offset()[0] - 1,
+                config.offset()[1] - 1,
+                config.offset()[2] - 1
+        );
 
         generateRooms(level, config, houseOrigin, houseRotation, random);
 

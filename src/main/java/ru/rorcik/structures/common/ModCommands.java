@@ -6,6 +6,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Rotation;
@@ -15,6 +16,7 @@ import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.generation.city.plains.HouseGenerator;
+import ru.rorcik.structures.generation.city.plains.RoadGenerator;
 
 @Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ModCommands {
@@ -27,6 +29,11 @@ public class ModCommands {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
 
+        registerHouseCommands(dispatcher);
+        registerRoadCommands(dispatcher);
+    }
+
+    private static void registerHouseCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(
                 Commands.literal("testhouse")
                         .then(Commands.argument("type", StringArgumentType.word())
@@ -119,5 +126,74 @@ public class ModCommands {
                                 )
                         )
         );
+    }
+
+    private static void registerRoadCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(
+                Commands.literal("testroad")
+                        .then(Commands.argument("type", StringArgumentType.word())
+                                .executes(ctx -> {
+                                    String type = StringArgumentType.getString(ctx, "type");
+                                    ServerLevel level = ctx.getSource().getLevel();
+                                    BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
+                                    Direction facing = ctx.getSource().getPlayer().getDirection();
+                                    Rotation rotation = directionToRotation(facing);
+
+                                    LOGGER.info("Generating road type: {} facing {} (rotation {})", type, facing, rotation.ordinal() * 90);
+
+                                    RoadGenerator.generateSingleRoad(level, pos, type, rotation, -1);
+
+                                    ctx.getSource().sendSuccess(() ->
+                                            Component.literal("Generating road type " + type + " facing " + facing + " at " + pos.toShortString()), true);
+                                    return 1;
+                                })
+                                .then(Commands.argument("rotation", IntegerArgumentType.integer(0, 3))
+                                        .executes(ctx -> {
+                                            String type = StringArgumentType.getString(ctx, "type");
+                                            int rotValue = IntegerArgumentType.getInteger(ctx, "rotation");
+                                            Rotation rotation = Rotation.values()[rotValue];
+                                            ServerLevel level = ctx.getSource().getLevel();
+                                            BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
+
+                                            LOGGER.info("Generating road type: {} with rotation: {} degrees", type, rotValue * 90);
+
+                                            RoadGenerator.generateSingleRoad(level, pos, type, rotation, -1);
+
+                                            ctx.getSource().sendSuccess(() ->
+                                                    Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees"), true);
+                                            return 1;
+                                        })
+                                        .then(Commands.argument("decor", IntegerArgumentType.integer(0))
+                                                .executes(ctx -> {
+                                                    String type = StringArgumentType.getString(ctx, "type");
+                                                    int rotValue = IntegerArgumentType.getInteger(ctx, "rotation");
+                                                    int decor = IntegerArgumentType.getInteger(ctx, "decor");
+                                                    Rotation rotation = Rotation.values()[rotValue];
+                                                    ServerLevel level = ctx.getSource().getLevel();
+                                                    BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
+
+                                                    LOGGER.info("Generating road type: {} with rotation: {} degrees and forced decor: {}",
+                                                            type, rotValue * 90, decor);
+
+                                                    RoadGenerator.generateSingleRoad(level, pos, type, rotation, decor);
+
+                                                    ctx.getSource().sendSuccess(() ->
+                                                            Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees and decor " + decor), true);
+                                                    return 1;
+                                                })
+                                        )
+                                )
+                        )
+        );
+    }
+
+    private static Rotation directionToRotation(Direction direction) {
+        return switch (direction) {
+            case SOUTH -> Rotation.NONE;
+            case WEST -> Rotation.CLOCKWISE_90;
+            case NORTH -> Rotation.CLOCKWISE_180;
+            case EAST -> Rotation.COUNTERCLOCKWISE_90;
+            default -> Rotation.NONE;
+        };
     }
 }
