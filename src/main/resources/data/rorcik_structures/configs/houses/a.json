@@ -1,7 +1,7 @@
 {
   "type": "a",
   "offset": [1, 0, 1],
-  "size": [64, 44, 64],
+  "size": [64, 64, 64],
   "floorHeight": 5,
   "firstFloorOffset": 1,
   "rooms": [

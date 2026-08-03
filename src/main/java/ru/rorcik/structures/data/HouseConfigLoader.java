@@ -5,12 +5,8 @@ import com.google.gson.GsonBuilder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
-import net.minecraftforge.event.server.ServerStartingEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
-import ru.rorcik.structures.RorcikStructuresMod;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -20,19 +16,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-@Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class HouseConfigLoader {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new GsonBuilder().create();
     private static final Map<String, HouseConfig> CONFIGS = new HashMap<>();
 
-    @SubscribeEvent
-    public static void onServerStarting(ServerStartingEvent event) {
-        ResourceManager resourceManager = event.getServer().getResourceManager();
-        loadConfigs(resourceManager);
-    }
-
-    private static void loadConfigs(ResourceManager resourceManager) {
+    public static void loadConfigs(ResourceManager resourceManager) {
         CONFIGS.clear();
 
         resourceManager.listResources("configs/houses", path -> path.getPath().endsWith(".json"))
@@ -41,17 +30,29 @@ public class HouseConfigLoader {
                          InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
 
                         HouseConfig config = GSON.fromJson(reader, HouseConfig.class);
-
                         int houseDecorCount = countHouseDecorations(resourceManager, config.type());
-                        LOGGER.info("House '{}' has {} decorations", config.type(), houseDecorCount);
+                        int totalRooms = 0;
 
                         List<RoomSlot> updatedRooms = new ArrayList<>();
                         for (RoomSlot room : config.rooms()) {
                             int roomDecorCount = countRoomDecorations(resourceManager, config.type(), room.nbt());
-                            LOGGER.info("Room '{}' in house '{}' has {} decorations", room.nbt(), config.type(), roomDecorCount);
 
-                            room.setDecorCount(roomDecorCount);
-                            updatedRooms.add(room);
+                            RoomSlot updatedRoom = new RoomSlot(
+                                    room.nbt(),
+                                    room.position(),
+                                    room.offset(),
+                                    room.size(),
+                                    room.rotation(),
+                                    room.startFloor(),
+                                    room.repeat(),
+                                    room.variant(),
+                                    room.mirrorX(),
+                                    room.mirrorZ(),
+                                    roomDecorCount
+                            );
+
+                            updatedRooms.add(updatedRoom);
+                            totalRooms++;
                         }
 
                         HouseConfig finalConfig = new HouseConfig(
@@ -65,7 +66,7 @@ public class HouseConfigLoader {
                         );
 
                         CONFIGS.put(finalConfig.type(), finalConfig);
-                        LOGGER.info("Loaded house config: {}", finalConfig.type());
+                        LOGGER.info("Loaded config '{}' ({} decors, {} room types)", finalConfig.type(), houseDecorCount, totalRooms);
 
                     } catch (Exception e) {
                         LOGGER.error("Failed to load config: {}", location, e);
@@ -73,9 +74,12 @@ public class HouseConfigLoader {
                 });
     }
 
+    public static void clear() {
+        CONFIGS.clear();
+    }
+
     private static int countHouseDecorations(ResourceManager resourceManager, String houseType) {
         int maxDecor = -1;
-
         Map<ResourceLocation, Resource> resources = resourceManager.listResources(
                 "structures/houses/" + houseType,
                 path -> path.getPath().endsWith(".nbt")
@@ -87,23 +91,17 @@ public class HouseConfigLoader {
             int prefixIndex = fileName.indexOf(prefix);
 
             if (prefixIndex >= 0) {
-                String numberPart = fileName.substring(prefixIndex + prefix.length());
-                numberPart = numberPart.replace(".nbt", "");
+                String numberPart = fileName.substring(prefixIndex + prefix.length()).replace(".nbt", "");
                 try {
-                    int decor = Integer.parseInt(numberPart);
-                    maxDecor = Math.max(maxDecor, decor);
-                } catch (NumberFormatException e) {
-                    // Игнорируем файлы без числа
-                }
+                    maxDecor = Math.max(maxDecor, Integer.parseInt(numberPart));
+                } catch (NumberFormatException ignored) {}
             }
         }
-
         return maxDecor + 1;
     }
 
     private static int countRoomDecorations(ResourceManager resourceManager, String houseType, String roomNbt) {
         int maxDecor = -1;
-
         Map<ResourceLocation, Resource> resources = resourceManager.listResources(
                 "structures/rooms/" + houseType,
                 path -> path.getPath().endsWith(".nbt") && path.getPath().contains(roomNbt + "_")
@@ -115,19 +113,14 @@ public class HouseConfigLoader {
             int prefixIndex = fileName.indexOf(prefix);
 
             if (prefixIndex >= 0) {
-                String afterPrefix = fileName.substring(prefixIndex + prefix.length());
-                afterPrefix = afterPrefix.replace(".nbt", "");
-                afterPrefix = afterPrefix.replaceAll("_[vg]+$", "");
-
+                String afterPrefix = fileName.substring(prefixIndex + prefix.length())
+                        .replace(".nbt", "")
+                        .replaceAll("_[vg]+$", "");
                 try {
-                    int decor = Integer.parseInt(afterPrefix);
-                    maxDecor = Math.max(maxDecor, decor);
-                } catch (NumberFormatException e) {
-                    // Игнорируем
-                }
+                    maxDecor = Math.max(maxDecor, Integer.parseInt(afterPrefix));
+                } catch (NumberFormatException ignored) {}
             }
         }
-
         return maxDecor + 1;
     }
 

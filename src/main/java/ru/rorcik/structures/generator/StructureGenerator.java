@@ -6,11 +6,14 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
+import ru.rorcik.structures.RorcikStructuresMod;
 import ru.rorcik.structures.data.HouseConfigLoader;
+import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.HouseConfig;
 import ru.rorcik.structures.data.RoomSlot;
 
@@ -39,32 +42,25 @@ public class StructureGenerator {
             return;
         }
 
-        LOGGER.info("=== GENERATION START ===");
-        LOGGER.info("House: {} rotation: {} degrees", houseType, houseRotation.ordinal() * 90);
-        LOGGER.info("Command origin: {}", origin.toShortString());
-
-        RandomSource random = RandomSource.create(seed);
+        long uniqueSeed = seed ^ origin.hashCode() ^ System.nanoTime() ^ level.getRandom().nextLong();
+        RandomSource random = RandomSource.create(uniqueSeed);
 
         int houseSizeX = config.size()[0];
         int houseSizeY = config.size()[1];
         int houseSizeZ = config.size()[2];
-        LOGGER.info("House size: {}x{}x{}", houseSizeX, houseSizeY, houseSizeZ);
 
         BlockPos houseOrigin = origin.offset(config.offset()[0], config.offset()[1], config.offset()[2]);
-        LOGGER.info("Fixed house anchor: {}", houseOrigin.toShortString());
-
         BlockPos housePlacementOrigin = getCompensatedOrigin(houseOrigin, houseRotation, houseSizeX, houseSizeZ);
-        LOGGER.info("Compensated house placement origin: {}", housePlacementOrigin.toShortString());
 
         int houseDecor = (forcedDecor >= 0) ? forcedDecor : random.nextInt(config.houseDecorCount());
         String houseNbt = houseType + "_" + houseDecor;
-        LOGGER.info("House NBT: {} (decor count: {})", houseNbt, config.houseDecorCount());
 
-        placeStructure(level, housePlacementOrigin, "rorcik_structures:houses/" + houseType + "/" + houseNbt, houseRotation, false, false);
+        placeStructure(level, housePlacementOrigin, RorcikStructuresMod.MODID + ":houses/" + houseType + "/" + houseNbt, houseRotation, false, false);
 
         generateRooms(level, config, houseOrigin, houseRotation, random);
 
-        LOGGER.info("=== GENERATION END ===");
+        BlockPos maxPos = housePlacementOrigin.offset(houseSizeX - 1, houseSizeY - 1, houseSizeZ - 1);
+        updateNeighborsAndLight(level, housePlacementOrigin, maxPos);
     }
 
     private static void generateRoomsOnly(ServerLevel level, BlockPos origin, String houseType, long seed, Rotation houseRotation) {
@@ -75,23 +71,19 @@ public class StructureGenerator {
             return;
         }
 
-        LOGGER.info("=== ROOMS ONLY GENERATION START ===");
-        LOGGER.info("House: {} rotation: {} degrees", houseType, houseRotation.ordinal() * 90);
-        LOGGER.info("Command origin: {}", origin.toShortString());
-
-        RandomSource random = RandomSource.create(seed);
+        long uniqueSeed = seed ^ origin.hashCode() ^ System.nanoTime() ^ level.getRandom().nextLong();
+        RandomSource random = RandomSource.create(uniqueSeed);
 
         int houseSizeX = config.size()[0];
         int houseSizeY = config.size()[1];
         int houseSizeZ = config.size()[2];
-        LOGGER.info("House size: {}x{}x{}", houseSizeX, houseSizeY, houseSizeZ);
 
         BlockPos houseOrigin = origin.offset(config.offset()[0], config.offset()[1], config.offset()[2]);
-        LOGGER.info("Fixed house anchor: {}", houseOrigin.toShortString());
 
         generateRooms(level, config, houseOrigin, houseRotation, random);
 
-        LOGGER.info("=== ROOMS ONLY GENERATION END ===");
+        BlockPos maxPos = houseOrigin.offset(houseSizeX - 1, houseSizeY - 1, houseSizeZ - 1);
+        updateNeighborsAndLight(level, houseOrigin, maxPos);
     }
 
     private static void generateRooms(ServerLevel level, HouseConfig config, BlockPos houseOrigin, Rotation houseRotation, RandomSource random) {
@@ -99,30 +91,18 @@ public class StructureGenerator {
         int houseSizeZ = config.size()[2];
 
         for (RoomSlot slot : config.rooms()) {
-            LOGGER.info("---");
-            LOGGER.info("Room slot: {} variant: {} (decor count: {})", slot.nbt(), slot.variant(), slot.decorCount());
-            LOGGER.info("Config position: [{}, {}, {}]", slot.position()[0], slot.position()[1], slot.position()[2]);
-            LOGGER.info("Config offset: [{}, {}, {}]", slot.offset()[0], slot.offset()[1], slot.offset()[2]);
-            LOGGER.info("Config rotation: {} degrees", slot.rotation());
-            LOGGER.info("Mirror: X={}, Z={}", slot.mirrorX(), slot.mirrorZ());
-
             int roomRotationDegrees = (slot.rotation() + houseRotation.ordinal() * 90) % 360;
             Rotation roomRotation = Rotation.values()[roomRotationDegrees / 90];
-            LOGGER.info("Final room rotation: {} degrees", roomRotationDegrees);
 
             int[] rotatedRoomPos = rotatePositionInHouse(
                     slot.position()[0], slot.position()[1], slot.position()[2],
                     houseRotation, houseSizeX, houseSizeZ
             );
-            LOGGER.info("Rotated room position: [{}, {}, {}]",
-                    rotatedRoomPos[0], rotatedRoomPos[1], rotatedRoomPos[2]);
 
             int[] rotatedRoomOffset = rotateOffset(
                     slot.offset()[0], slot.offset()[1], slot.offset()[2],
                     houseRotation
             );
-            LOGGER.info("Rotated room offset: [{}, {}, {}]",
-                    rotatedRoomOffset[0], rotatedRoomOffset[1], rotatedRoomOffset[2]);
 
             for (int i = 0; i < slot.repeat(); i++) {
                 int floor = slot.startFloor() + i;
@@ -144,11 +124,19 @@ public class StructureGenerator {
                         rotatedRoomPos[2] + rotatedRoomOffset[2]
                 );
 
-                LOGGER.info("Floor {}: y={}", floor, y);
-                LOGGER.info("Room StructureBlock origin: {}", roomOrigin.toShortString());
-                LOGGER.info("Room NBT: {}", roomNbt);
+                placeStructure(level, roomOrigin, RorcikStructuresMod.MODID + ":rooms/" + config.type() + "/" + roomNbt, roomRotation, slot.mirrorX(), slot.mirrorZ());
+            }
+        }
+    }
 
-                placeStructure(level, roomOrigin, "rorcik_structures:rooms/" + config.type() + "/" + roomNbt, roomRotation, slot.mirrorX(), slot.mirrorZ());
+    private static void updateNeighborsAndLight(ServerLevel level, BlockPos min, BlockPos max) {
+        for (BlockPos pos : BlockPos.betweenClosed(min, max)) {
+            BlockState state = level.getBlockState(pos);
+            if (!state.isAir()) {
+                level.blockUpdated(pos, state.getBlock());
+                if (state.getLightEmission(level, pos) > 0) {
+                    level.getLightEngine().checkBlock(pos);
+                }
             }
         }
     }
@@ -187,17 +175,17 @@ public class StructureGenerator {
             return;
         }
 
-        Optional<StructureTemplate> templateOpt = level.getStructureManager().get(location);
-
+        Optional<StructureTemplate> templateOpt = StructureCache.get(location);
         if (templateOpt.isEmpty()) {
-            LOGGER.error("Structure not found: {}", nbtPath);
+            LOGGER.error("Structure not found in cache: {}", nbtPath);
             return;
         }
 
         StructureTemplate template = templateOpt.get();
         StructurePlaceSettings settings = new StructurePlaceSettings()
                 .setRotation(rotation)
-                .setKnownShape(true);
+                .setKnownShape(true)
+                .setIgnoreEntities(false);
 
         if (mirrorX && mirrorZ) {
             settings.setMirror(Mirror.LEFT_RIGHT);
@@ -209,6 +197,7 @@ public class StructureGenerator {
         }
 
         BlockPos size = new BlockPos(template.getSize());
-        template.placeInWorld(level, origin, origin.offset(size), settings, level.getRandom(), 3);
+
+        template.placeInWorld(level, origin, origin.offset(size), settings, level.getRandom(), 18);
     }
 }
