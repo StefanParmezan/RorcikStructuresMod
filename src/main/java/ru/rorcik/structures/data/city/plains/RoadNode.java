@@ -8,25 +8,61 @@ import java.util.List;
 
 public class RoadNode {
     private final BlockPos position;
-    private final Direction incoming;
-    private final int exitChoice;
+    private final List<Direction> entries = new ArrayList<>();
     private final int depth;
+    private final List<Direction> exitDirections = new ArrayList<>();
     private final List<RoadNode> children = new ArrayList<>();
+    private boolean isTerminal;
 
-    public RoadNode(BlockPos position, Direction incoming, int exitChoice, int depth) {
+    public RoadNode(BlockPos position, Direction primaryEntry, int depth) {
         this.position = position;
-        this.incoming = incoming;
-        this.exitChoice = exitChoice;
         this.depth = depth;
+        if (primaryEntry != null) {
+            this.entries.add(primaryEntry.getOpposite());
+        }
     }
 
-    public BlockPos position() { return position; }
-    public Direction incoming() { return incoming; }
-    public int exitChoice() { return exitChoice; }
-    public int depth() { return depth; }
-    public List<RoadNode> children() { return children; }
+    public void addEntry(Direction entryDir) {
+        Direction entry = entryDir.getOpposite();
+        if (!entries.contains(entry)) {
+            entries.add(entry);
+        }
+    }
 
-    public void addChild(RoadNode child) {
+    public void addExit(Direction exitDir, RoadNode child) {
+        if (!exitDirections.contains(exitDir)) {
+            exitDirections.add(exitDir);
+        }
         children.add(child);
+    }
+
+    public void markTerminal() {
+        isTerminal = true;
+    }
+
+    public List<Direction> getAllConnections() {
+        List<Direction> all = new ArrayList<>(entries);
+        for (Direction exit : exitDirections) {
+            if (!all.contains(exit)) {
+                all.add(exit);
+            }
+        }
+        return all;
+    }
+
+    public BlockPos position() {
+        return position;
+    }
+
+    public int depth() {
+        return depth;
+    }
+
+    public List<RoadNode> children() {
+        return children;
+    }
+
+    public boolean isTerminal() {
+        return isTerminal;
     }
 }

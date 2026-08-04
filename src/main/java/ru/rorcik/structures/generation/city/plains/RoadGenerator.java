@@ -6,6 +6,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkStatus;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.ModPaths;
@@ -15,7 +16,6 @@ import ru.rorcik.structures.data.city.plains.RoadNode;
 import ru.rorcik.structures.data.city.plains.RoadSegment;
 import ru.rorcik.structures.generation.StructureUtils;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -29,8 +29,6 @@ public class RoadGenerator {
     private static final int STRAIGHT_BETWEEN_NODES = 2;
     private static final int MAX_DEPTH = 8;
 
-    private static final int FORCED_DEAD_END = -1;
-
     private record RoadMapEntry(String type, Rotation rotation) {}
 
     private static Map<Set<Direction>, RoadMapEntry> roadMap;
@@ -41,21 +39,38 @@ public class RoadGenerator {
 
         buildRoadMap();
 
-        Set<BlockPos> occupied = new HashSet<>();
-        RoadNode root = buildGraph(random, origin, Direction.SOUTH, 0, occupied);
+        Map<BlockPos, RoadNode> nodeMap = new HashMap<>();
+        Set<BlockPos> straightPositions = new HashSet<>();
+
+        RoadNode root = buildGraph(random, origin, Direction.SOUTH, 0, nodeMap, straightPositions);
+
+        preloadChunks(level, nodeMap.keySet());
 
         RoadNetwork network = new RoadNetwork();
-        placeGraph(level, network, random, root);
+        placeGraph(level, network, random, root, new HashSet<>());
 
-        BlockPos minBound = origin;
-        BlockPos maxBound = origin;
-        for (RoadSegment segment : network.getSegments()) {
-            minBound = min(minBound, segment.position());
-            maxBound = max(maxBound, segment.position().offset(63, 63, 63));
+        LOGGER.info("Generated road network with {} segments", network.size());
+    }
+
+    private static void preloadChunks(ServerLevel level, Set<BlockPos> positions) {
+        Set<Long> chunkKeys = new HashSet<>();
+
+        for (BlockPos pos : positions) {
+            for (int dx = 0; dx < 4; dx++) {
+                for (int dz = 0; dz < 4; dz++) {
+                    int chunkX = (pos.getX() >> 4) + dx;
+                    int chunkZ = (pos.getZ() >> 4) + dz;
+                    long key = ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
+                    chunkKeys.add(key);
+                }
+            }
         }
 
-        updateNeighborsAndLight(level, minBound, maxBound);
-        LOGGER.info("Generated road network with {} segments", network.size());
+        for (long key : chunkKeys) {
+            int chunkX = (int) (key >> 32);
+            int chunkZ = (int) key;
+            level.getChunkSource().getChunk(chunkX, chunkZ, ChunkStatus.FULL, true);
+        }
     }
 
     private static void buildRoadMap() {
@@ -80,26 +95,44 @@ public class RoadGenerator {
         return roadMap.get(key);
     }
 
-    private static RoadNode buildGraph(RandomSource random, BlockPos startPos, Direction direction, int depth, Set<BlockPos> occupied) {
+    private static RoadNode buildGraph(
+            RandomSource random,
+            BlockPos startPos,
+            Direction direction,
+            int depth,
+            Map<BlockPos, RoadNode> nodeMap,
+            Set<BlockPos> straightPositions
+    ) {
         if (depth > MAX_DEPTH) {
-            return new RoadNode(startPos, direction, FORCED_DEAD_END, depth);
+            RoadNode deadEnd = new RoadNode(startPos, direction, depth);
+            deadEnd.markTerminal();
+            return deadEnd;
         }
 
-        if (occupied.contains(startPos)) {
-            return new RoadNode(startPos, direction, FORCED_DEAD_END, depth);
+        if (straightPositions.contains(startPos)) {
+            RoadNode deadEnd = new RoadNode(startPos, direction, depth);
+            deadEnd.markTerminal();
+            return deadEnd;
         }
 
-        occupied.add(startPos);
+        if (nodeMap.containsKey(startPos)) {
+            RoadNode existing = nodeMap.get(startPos);
+            existing.addEntry(direction);
+            return existing;
+        }
 
         int exitChoice = chooseExitWithDepth(random, depth);
-        RoadNode node = new RoadNode(startPos, direction, exitChoice, depth);
+        RoadNode node = new RoadNode(startPos, direction, depth);
+        nodeMap.put(startPos, node);
 
         if (exitChoice == 0) {
+            node.markTerminal();
             return node;
         }
 
         List<Direction> exits = getExitsForChoice(exitChoice, direction);
         if (exits.isEmpty()) {
+            node.markTerminal();
             return node;
         }
 
@@ -107,46 +140,57 @@ public class RoadGenerator {
             BlockPos currentPos = startPos;
             for (int i = 0; i < STRAIGHT_BETWEEN_NODES; i++) {
                 currentPos = RoadNetwork.getNextPosition(currentPos, exit, ROAD_STEP);
-                occupied.add(currentPos);
+                straightPositions.add(currentPos);
             }
 
             BlockPos childPos = RoadNetwork.getNextPosition(currentPos, exit, ROAD_STEP);
 
-            if (!occupied.contains(childPos)) {
-                RoadNode child = buildGraph(random, childPos, exit, depth + 1, occupied);
-                node.addChild(child);
+            RoadNode child = buildGraph(random, childPos, exit, depth + 1, nodeMap, straightPositions);
+
+            if (child != node) {
+                node.addExit(exit, child);
             }
         }
 
         return node;
     }
 
-    private static void placeGraph(ServerLevel level, RoadNetwork network, RandomSource random, RoadNode node) {
-        if (node.exitChoice() == FORCED_DEAD_END) {
+    private static void placeGraph(
+            ServerLevel level,
+            RoadNetwork network,
+            RandomSource random,
+            RoadNode node,
+            Set<BlockPos> placed
+    ) {
+        if (placed.contains(node.position())) {
             return;
-        } else if (node.exitChoice() == 0) {
-            Direction opposite = node.incoming().getOpposite();
-            RoadMapEntry entry = findRoadForConnections(List.of(opposite));
-            if (entry != null) {
-                createAndPlaceRoad(level, network, entry.type(), node.position(), entry.rotation(), random);
+        }
+        placed.add(node.position());
+
+        List<Direction> connections = node.getAllConnections();
+
+        if (node.isTerminal() || connections.isEmpty()) {
+            if (!connections.isEmpty()) {
+                RoadMapEntry entry = findRoadForConnections(connections);
+                if (entry != null) {
+                    createAndPlaceRoad(level, network, entry.type(), node.position(), entry.rotation(), random);
+                } else {
+                    placeStopRoad(level, network, random, node.position(), connections.get(0));
+                }
+            } else {
+                placeStopRoad(level, network, random, node.position(), Direction.NORTH);
             }
         } else {
-            // Обычный узел
-            Direction entryDir = node.incoming().getOpposite();
-            List<Direction> exits = getExitsForChoice(node.exitChoice(), node.incoming());
-
-            List<Direction> connections = new ArrayList<>();
-            connections.add(entryDir);
-            connections.addAll(exits);
-
             RoadMapEntry entry = findRoadForConnections(connections);
             if (entry != null) {
                 createAndPlaceRoad(level, network, entry.type(), node.position(), entry.rotation(), random);
+            } else {
+                placeStopRoad(level, network, random, node.position(), connections.get(0));
             }
         }
 
         for (RoadNode child : node.children()) {
-            Direction exitDir = child.incoming();
+            Direction exitDir = guessDirection(node.position(), child.position());
             BlockPos currentPos = RoadNetwork.getNextPosition(node.position(), exitDir, ROAD_STEP);
             Rotation sRotation = directionToRotation(exitDir);
 
@@ -157,7 +201,31 @@ public class RoadGenerator {
                 currentPos = RoadNetwork.getNextPosition(currentPos, exitDir, ROAD_STEP);
             }
 
-            placeGraph(level, network, random, child);
+            placeGraph(level, network, random, child, placed);
+        }
+    }
+
+    private static Direction guessDirection(BlockPos from, BlockPos to) {
+        int dx = to.getX() - from.getX();
+        int dz = to.getZ() - from.getZ();
+        if (Math.abs(dx) > Math.abs(dz)) {
+            return dx > 0 ? Direction.EAST : Direction.WEST;
+        } else {
+            return dz > 0 ? Direction.SOUTH : Direction.NORTH;
+        }
+    }
+
+    private static void placeStopRoad(
+            ServerLevel level,
+            RoadNetwork network,
+            RandomSource random,
+            BlockPos position,
+            Direction incomingDir
+    ) {
+        Direction entryConnection = incomingDir.getOpposite();
+        RoadMapEntry entry = findRoadForConnections(List.of(entryConnection));
+        if (entry != null) {
+            createAndPlaceRoad(level, network, entry.type(), position, entry.rotation(), random);
         }
     }
 
@@ -256,34 +324,6 @@ public class RoadGenerator {
         };
     }
 
-    private static BlockPos min(BlockPos a, BlockPos b) {
-        return new BlockPos(
-                Math.min(a.getX(), b.getX()),
-                Math.min(a.getY(), b.getY()),
-                Math.min(a.getZ(), b.getZ())
-        );
-    }
-
-    private static BlockPos max(BlockPos a, BlockPos b) {
-        return new BlockPos(
-                Math.max(a.getX(), b.getX()),
-                Math.max(a.getY(), b.getY()),
-                Math.max(a.getZ(), b.getZ())
-        );
-    }
-
-    private static void updateNeighborsAndLight(ServerLevel level, BlockPos min, BlockPos max) {
-        for (BlockPos pos : BlockPos.betweenClosed(min, max)) {
-            BlockState state = level.getBlockState(pos);
-            if (!state.isAir()) {
-                level.blockUpdated(pos, state.getBlock());
-                if (state.getLightEmission(level, pos) > 0) {
-                    level.getLightEngine().checkBlock(pos);
-                }
-            }
-        }
-    }
-
     public static void generateSingleRoad(ServerLevel level, BlockPos origin, String type, Rotation rotation, int forcedDecor) {
         RoadConfig config = RoadConfigLoader.getConfig(type);
         if (config == null) {
@@ -291,13 +331,11 @@ public class RoadGenerator {
             return;
         }
 
-        int decor = forcedDecor >= 0 ? forcedDecor : level.getRandom().nextInt(config.decorCount());
+        int decorCount = config.decorCount();
+        int decor = forcedDecor >= 0 ? forcedDecor : (decorCount > 0 ? level.getRandom().nextInt(decorCount) : 0);
         List<Direction> connections = RoadNetwork.getRotatedConnections(config, rotation);
 
         RoadSegment segment = new RoadSegment(type, origin, rotation, decor, connections);
         placeRoad(level, segment, config);
-
-        BlockPos maxPos = origin.offset(config.size()[0] - 1, config.size()[1] - 1, config.size()[2] - 1);
-        updateNeighborsAndLight(level, origin, maxPos);
     }
 }
