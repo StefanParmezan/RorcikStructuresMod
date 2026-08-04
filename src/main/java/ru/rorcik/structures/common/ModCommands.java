@@ -15,6 +15,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
+import ru.rorcik.structures.generation.city.plains.CityGenerator;
 import ru.rorcik.structures.generation.city.plains.HouseGenerator;
 import ru.rorcik.structures.generation.city.plains.RoadGenerator;
 
@@ -31,6 +32,7 @@ public class ModCommands {
 
         registerHouseCommands(dispatcher);
         registerRoadCommands(dispatcher);
+        registerCityCommands(dispatcher);
     }
 
     private static void registerHouseCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
@@ -136,15 +138,14 @@ public class ModCommands {
                                     String type = StringArgumentType.getString(ctx, "type");
                                     ServerLevel level = ctx.getSource().getLevel();
                                     BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
-                                    Direction facing = ctx.getSource().getPlayer().getDirection();
-                                    Rotation rotation = directionToRotation(facing);
+                                    Rotation rotation = Rotation.NONE;
 
-                                    LOGGER.info("Generating road type: {} facing {} (rotation {})", type, facing, rotation.ordinal() * 90);
+                                    LOGGER.info("Generating road type: {} with default rotation (NONE)", type);
 
                                     RoadGenerator.generateSingleRoad(level, pos, type, rotation, -1);
 
                                     ctx.getSource().sendSuccess(() ->
-                                            Component.literal("Generating road type " + type + " facing " + facing + " at " + pos.toShortString()), true);
+                                            Component.literal("Generating road type " + type + " at " + pos.toShortString()), true);
                                     return 1;
                                 })
                                 .then(Commands.argument("rotation", IntegerArgumentType.integer(0, 3))
@@ -184,6 +185,25 @@ public class ModCommands {
                                         )
                                 )
                         )
+        );
+    }
+
+    private static void registerCityCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(
+                Commands.literal("testcity")
+                        .executes(ctx -> {
+                            ServerLevel level = ctx.getSource().getLevel();
+                            BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
+                            long seed = level.getSeed();
+
+                            LOGGER.info("Generating city at {}", pos.toShortString());
+
+                            CityGenerator.generateCity(level, pos, seed);
+
+                            ctx.getSource().sendSuccess(() ->
+                                    Component.literal("Generating city at " + pos.toShortString()), true);
+                            return 1;
+                        })
         );
     }
 

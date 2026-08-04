@@ -1,0 +1,6 @@
+{
+  "type": "st",
+  "offset": [0, -3, 0],
+  "size": [64, 24, 64],
+  "connections": ["NORTH"]
+}

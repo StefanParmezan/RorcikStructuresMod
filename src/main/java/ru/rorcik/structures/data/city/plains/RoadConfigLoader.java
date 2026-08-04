@@ -12,7 +12,6 @@ import ru.rorcik.structures.common.ModPaths;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -31,23 +30,28 @@ public class RoadConfigLoader {
                     try (InputStream stream = resource.open();
                          InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
 
-                        RoadConfig config = GSON.fromJson(reader, RoadConfig.class);
-                        List<Integer> stopVariants = config.stopVariants() != null
-                                ? config.stopVariants()
+                        RoadConfig rawConfig = GSON.fromJson(reader, RoadConfig.class);
+
+                        int decorCount = countRoadDecorations(resourceManager, rawConfig.type());
+                        List<Integer> stopVariants = rawConfig.stopVariants() != null
+                                ? rawConfig.stopVariants()
+                                : Collections.emptyList();
+                        List<String> connections = rawConfig.connections() != null
+                                ? rawConfig.connections()
                                 : Collections.emptyList();
 
                         RoadConfig finalConfig = new RoadConfig(
-                                config.type(),
-                                config.offset(),
-                                config.size(),
-                                config.decorCount(),
-                                config.connections(),
+                                rawConfig.type(),
+                                rawConfig.offset(),
+                                rawConfig.size(),
+                                decorCount,
+                                connections,
                                 stopVariants
                         );
 
                         CONFIGS.put(finalConfig.type(), finalConfig);
                         LOGGER.info("Loaded road config '{}' ({} variants, {} connections)",
-                                finalConfig.type(), finalConfig.decorCount(), finalConfig.connections().size());
+                                finalConfig.type(), decorCount, connections.size());
 
                     } catch (Exception e) {
                         LOGGER.error("Failed to load road config: {}", location, e);
@@ -57,6 +61,28 @@ public class RoadConfigLoader {
 
     public static void clear() {
         CONFIGS.clear();
+    }
+
+    private static int countRoadDecorations(ResourceManager resourceManager, String roadType) {
+        int maxDecor = -1;
+        Map<ResourceLocation, Resource> resources = resourceManager.listResources(
+                ModPaths.STRUCTURES_CITIES_PLAINS_ROADS + "/" + roadType,
+                path -> path.getPath().endsWith(".nbt")
+        );
+
+        for (ResourceLocation location : resources.keySet()) {
+            String fileName = location.getPath();
+            String prefix = roadType + "_";
+            int prefixIndex = fileName.indexOf(prefix);
+
+            if (prefixIndex >= 0) {
+                String numberPart = fileName.substring(prefixIndex + prefix.length()).replace(".nbt", "");
+                try {
+                    maxDecor = Math.max(maxDecor, Integer.parseInt(numberPart));
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        return maxDecor + 1;
     }
 
     public static RoadConfig getConfig(String type) {
