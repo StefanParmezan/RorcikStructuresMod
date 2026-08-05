@@ -5,7 +5,6 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Rotation;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkStatus;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
@@ -27,72 +26,78 @@ public class RoadGenerator {
     private static final int ROAD_STEP = 64;
     private static final int INITIAL_STRAIGHT_COUNT = 2;
     private static final int STRAIGHT_BETWEEN_NODES = 2;
-    private static final int MAX_DEPTH = 8;
-
-    private record RoadMapEntry(String type, Rotation rotation) {}
-
-    private static Map<Set<Direction>, RoadMapEntry> roadMap;
+    private static final int MAX_DEPTH = 7;
+    private static final int MAX_NODES = 70;
 
     public static void generateRoadNetwork(ServerLevel level, BlockPos origin, long seed, int maxSegments) {
         long uniqueSeed = seed ^ origin.hashCode() ^ System.nanoTime() ^ level.getRandom().nextLong();
         RandomSource random = RandomSource.create(uniqueSeed);
-
-        buildRoadMap();
 
         Map<BlockPos, RoadNode> nodeMap = new HashMap<>();
         Set<BlockPos> straightPositions = new HashSet<>();
 
         RoadNode root = buildGraph(random, origin, Direction.SOUTH, 0, nodeMap, straightPositions);
 
-        preloadChunks(level, nodeMap.keySet());
+        preloadChunksAlongPath(level, nodeMap.keySet(), straightPositions);
 
         RoadNetwork network = new RoadNetwork();
         placeGraph(level, network, random, root, new HashSet<>());
 
-        LOGGER.info("Generated road network with {} segments", network.size());
+        LOGGER.info("Generated road network with {} segments ({} nodes)", network.size(), nodeMap.size());
     }
 
-    private static void preloadChunks(ServerLevel level, Set<BlockPos> positions) {
+    private static void preloadChunksAlongPath(ServerLevel level, Set<BlockPos> nodePositions, Set<BlockPos> straightPositions) {
         Set<Long> chunkKeys = new HashSet<>();
 
-        for (BlockPos pos : positions) {
+        for (BlockPos pos : nodePositions) {
+            int baseChunkX = pos.getX() >> 4;
+            int baseChunkZ = pos.getZ() >> 4;
+
             for (int dx = 0; dx < 4; dx++) {
                 for (int dz = 0; dz < 4; dz++) {
-                    int chunkX = (pos.getX() >> 4) + dx;
-                    int chunkZ = (pos.getZ() >> 4) + dz;
+                    int chunkX = baseChunkX + dx;
+                    int chunkZ = baseChunkZ + dz;
                     long key = ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
                     chunkKeys.add(key);
                 }
             }
         }
 
-        for (long key : chunkKeys) {
-            int chunkX = (int) (key >> 32);
-            int chunkZ = (int) key;
-            level.getChunkSource().getChunk(chunkX, chunkZ, ChunkStatus.FULL, true);
-        }
-    }
+        for (BlockPos pos : straightPositions) {
+            int baseChunkX = pos.getX() >> 4;
+            int baseChunkZ = pos.getZ() >> 4;
 
-    private static void buildRoadMap() {
-        roadMap = new HashMap<>();
-
-        for (RoadConfig config : RoadConfigLoader.getAllConfigs().values()) {
-            for (Rotation rotation : Rotation.values()) {
-                List<Direction> connections = RoadNetwork.getRotatedConnections(config, rotation);
-                Set<Direction> key = new HashSet<>(connections);
-
-                if (!roadMap.containsKey(key)) {
-                    roadMap.put(key, new RoadMapEntry(config.type(), rotation));
+            for (int dx = 0; dx < 4; dx++) {
+                for (int dz = 0; dz < 4; dz++) {
+                    int chunkX = baseChunkX + dx;
+                    int chunkZ = baseChunkZ + dz;
+                    long key = ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
+                    chunkKeys.add(key);
                 }
             }
         }
 
-        LOGGER.info("Road map built with {} entries", roadMap.size());
-    }
+        int totalChunks = chunkKeys.size();
+        int totalSegments = nodePositions.size() + straightPositions.size();
 
-    private static RoadMapEntry findRoadForConnections(List<Direction> connections) {
-        Set<Direction> key = new HashSet<>(connections);
-        return roadMap.get(key);
+        LOGGER.info("Preloading {} chunks for {} segments ({} nodes, {} straights)",
+                totalChunks, totalSegments, nodePositions.size(), straightPositions.size());
+
+        int loaded = 0;
+        int logInterval = Math.max(1, totalChunks / 5);
+
+        for (long key : chunkKeys) {
+            int chunkX = (int) (key >> 32);
+            int chunkZ = (int) key;
+            level.getChunkSource().getChunk(chunkX, chunkZ, ChunkStatus.FULL, true);
+            loaded++;
+
+            if (loaded % logInterval == 0) {
+                LOGGER.info("Loaded {} / {} chunks ({}%)", loaded, totalChunks, (loaded * 100) / totalChunks);
+            }
+        }
+
+        LOGGER.info("Chunk preloading complete: {} chunks loaded", loaded);
     }
 
     private static RoadNode buildGraph(
@@ -103,7 +108,7 @@ public class RoadGenerator {
             Map<BlockPos, RoadNode> nodeMap,
             Set<BlockPos> straightPositions
     ) {
-        if (depth > MAX_DEPTH) {
+        if (depth > MAX_DEPTH || nodeMap.size() >= MAX_NODES) {
             RoadNode deadEnd = new RoadNode(startPos, direction, depth);
             deadEnd.markTerminal();
             return deadEnd;
@@ -171,7 +176,7 @@ public class RoadGenerator {
 
         if (node.isTerminal() || connections.isEmpty()) {
             if (!connections.isEmpty()) {
-                RoadMapEntry entry = findRoadForConnections(connections);
+                RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
                 if (entry != null) {
                     createAndPlaceRoad(level, network, entry.type(), node.position(), entry.rotation(), random);
                 } else {
@@ -181,7 +186,7 @@ public class RoadGenerator {
                 placeStopRoad(level, network, random, node.position(), Direction.NORTH);
             }
         } else {
-            RoadMapEntry entry = findRoadForConnections(connections);
+            RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
             if (entry != null) {
                 createAndPlaceRoad(level, network, entry.type(), node.position(), entry.rotation(), random);
             } else {
@@ -223,7 +228,7 @@ public class RoadGenerator {
             Direction incomingDir
     ) {
         Direction entryConnection = incomingDir.getOpposite();
-        RoadMapEntry entry = findRoadForConnections(List.of(entryConnection));
+        RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(List.of(entryConnection));
         if (entry != null) {
             createAndPlaceRoad(level, network, entry.type(), position, entry.rotation(), random);
         }

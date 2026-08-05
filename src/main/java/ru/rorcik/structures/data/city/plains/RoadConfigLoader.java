@@ -2,25 +2,34 @@ package ru.rorcik.structures.data.city.plains;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.world.level.block.Rotation;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.generation.city.plains.RoadNetwork;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class RoadConfigLoader {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new GsonBuilder().create();
     private static final Map<String, RoadConfig> CONFIGS = new HashMap<>();
+    private static Map<Set<Direction>, RoadMapEntry> ROAD_MAP = Collections.emptyMap();
+
+    public record RoadMapEntry(String type, Rotation rotation) {}
 
     public static void loadConfigs(ResourceManager resourceManager) {
         CONFIGS.clear();
@@ -57,10 +66,36 @@ public class RoadConfigLoader {
                         LOGGER.error("Failed to load road config: {}", location, e);
                     }
                 });
+
+        buildRoadMap();
+    }
+
+    private static void buildRoadMap() {
+        Map<Set<Direction>, RoadMapEntry> tempMap = new HashMap<>();
+
+        for (RoadConfig config : CONFIGS.values()) {
+            for (Rotation rotation : Rotation.values()) {
+                List<Direction> connections = RoadNetwork.getRotatedConnections(config, rotation);
+                Set<Direction> key = new HashSet<>(connections);
+
+                if (!tempMap.containsKey(key)) {
+                    tempMap.put(key, new RoadMapEntry(config.type(), rotation));
+                }
+            }
+        }
+
+        ROAD_MAP = Collections.unmodifiableMap(tempMap);
+        LOGGER.info("Road map built with {} entries", ROAD_MAP.size());
+    }
+
+    public static RoadMapEntry findRoadForConnections(List<Direction> connections) {
+        Set<Direction> key = new HashSet<>(connections);
+        return ROAD_MAP.get(key);
     }
 
     public static void clear() {
         CONFIGS.clear();
+        ROAD_MAP = Collections.emptyMap();
     }
 
     private static int countRoadDecorations(ResourceManager resourceManager, String roadType) {
