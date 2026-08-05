@@ -1,4 +1,4 @@
-package ru.rorcik.structures.data.city.plains;
+package ru.rorcik.structures.data.city.plains.containers;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

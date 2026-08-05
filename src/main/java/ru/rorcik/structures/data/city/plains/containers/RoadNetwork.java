@@ -1,10 +1,8 @@
-package ru.rorcik.structures.generation.city.plains;
+package ru.rorcik.structures.data.city.plains.containers;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Rotation;
-import ru.rorcik.structures.data.city.plains.RoadConfig;
-import ru.rorcik.structures.data.city.plains.RoadSegment;
 
 import java.util.ArrayList;
 import java.util.Collections;

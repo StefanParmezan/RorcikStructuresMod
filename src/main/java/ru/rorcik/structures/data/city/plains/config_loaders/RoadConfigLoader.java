@@ -1,4 +1,4 @@
-package ru.rorcik.structures.data.city.plains;
+package ru.rorcik.structures.data.city.plains.config_loaders;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -9,13 +9,14 @@ import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.world.level.block.Rotation;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
+import ru.rorcik.structures.api.IConfigLoader;
 import ru.rorcik.structures.common.ModPaths;
-import ru.rorcik.structures.generation.city.plains.RoadNetwork;
+import ru.rorcik.structures.data.city.plains.containers.RoadConfig;
+import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,7 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class RoadConfigLoader {
+public class RoadConfigLoader implements IConfigLoader {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new GsonBuilder().create();
     private static final Map<String, RoadConfig> CONFIGS = new HashMap<>();

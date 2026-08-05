@@ -1,4 +1,4 @@
-package ru.rorcik.structures.data.city.plains;
+package ru.rorcik.structures.data.city.plains.config_loaders;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -7,7 +7,10 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
+import ru.rorcik.structures.api.IConfigLoader;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.data.city.plains.containers.HouseConfig;
+import ru.rorcik.structures.data.city.plains.containers.RoomSlot;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -17,7 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class HouseConfigLoader {
+public class HouseConfigLoader implements IConfigLoader {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new GsonBuilder().create();
     private static final Map<String, HouseConfig> CONFIGS = new HashMap<>();

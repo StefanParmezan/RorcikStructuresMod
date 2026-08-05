@@ -15,9 +15,9 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
-import ru.rorcik.structures.generation.city.plains.CityGenerator;
-import ru.rorcik.structures.generation.city.plains.HouseGenerator;
-import ru.rorcik.structures.generation.city.plains.RoadGenerator;
+import ru.rorcik.structures.generation.city.plains.cities.CityGenerator;
+import ru.rorcik.structures.generation.city.plains.houses.HouseGenerator;
+import ru.rorcik.structures.generation.city.plains.cities.roads.RoadPlacer;
 
 @Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ModCommands {
@@ -142,7 +142,7 @@ public class ModCommands {
 
                                     LOGGER.info("Generating road type: {} with default rotation (NONE)", type);
 
-                                    RoadGenerator.generateSingleRoad(level, pos, type, rotation, -1);
+                                    RoadPlacer.generateSingleRoad(level, pos, type, rotation, -1);
 
                                     ctx.getSource().sendSuccess(() ->
                                             Component.literal("Generating road type " + type + " at " + pos.toShortString()), true);
@@ -158,7 +158,7 @@ public class ModCommands {
 
                                             LOGGER.info("Generating road type: {} with rotation: {} degrees", type, rotValue * 90);
 
-                                            RoadGenerator.generateSingleRoad(level, pos, type, rotation, -1);
+                                            RoadPlacer.generateSingleRoad(level, pos, type, rotation, -1);
 
                                             ctx.getSource().sendSuccess(() ->
                                                     Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees"), true);
@@ -176,7 +176,7 @@ public class ModCommands {
                                                     LOGGER.info("Generating road type: {} with rotation: {} degrees and forced decor: {}",
                                                             type, rotValue * 90, decor);
 
-                                                    RoadGenerator.generateSingleRoad(level, pos, type, rotation, decor);
+                                                    RoadPlacer.generateSingleRoad(level, pos, type, rotation, decor);
 
                                                     ctx.getSource().sendSuccess(() ->
                                                             Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees and decor " + decor), true);
