@@ -20,6 +20,8 @@ import java.util.Set;
 
 public class BuildingSlotAllocator {
     private static final Logger LOGGER = LogUtils.getLogger();
+    private static final String PLATFORM_NAME = "platform_0";
+    private static final String PLATFORM_CATEGORY = "platforms";
 
     public static List<BuildingSlot> allocateSlots(
             Map<BlockPos, RoadNode> nodeMap,
@@ -32,8 +34,14 @@ public class BuildingSlotAllocator {
         allocateFromNodes(nodeMap, occupiedSlots, slots, random);
         allocateFromStraights(nodeMap, straightPositions, occupiedSlots, slots, random);
 
-        LOGGER.info("Allocated {} building slots ({} from nodes, total nodes: {})",
-                slots.size(), slots.size(), nodeMap.size());
+        List<BuildingSlot> firstLayer = new ArrayList<>(slots);
+        allocateSecondLayer(firstLayer, occupiedSlots, slots, random);
+
+        List<BuildingSlot> allBuildings = new ArrayList<>(slots);
+        allocatePlatforms(allBuildings, occupiedSlots, slots);
+
+        LOGGER.info("Allocated {} slots ({} first layer, total nodes: {})",
+                slots.size(), firstLayer.size(), nodeMap.size());
 
         return slots;
     }
@@ -48,6 +56,10 @@ public class BuildingSlotAllocator {
             RoadNode node = entry.getValue();
             BlockPos nodePos = node.position();
             List<Direction> connections = node.getAllConnections();
+
+            if (node.isTerminal() && connections.size() == 1) {
+                continue;
+            }
 
             Direction deadEndExcludedSide = null;
             if (node.isTerminal() && !connections.isEmpty()) {
@@ -86,6 +98,68 @@ public class BuildingSlotAllocator {
         }
     }
 
+    private static void allocateSecondLayer(
+            List<BuildingSlot> firstLayer,
+            Map<BlockPos, BuildingSlot> occupiedSlots,
+            List<BuildingSlot> slots,
+            RandomSource random
+    ) {
+        for (BuildingSlot firstSlot : firstLayer) {
+            Direction roadSide = firstSlot.roadSide();
+            BlockPos secondLayerPos = RoadNetwork.getNextPosition(firstSlot.position(), roadSide, GeneratorConfig.BUILDING_DISTANCE);
+
+            if (occupiedSlots.containsKey(secondLayerPos)) continue;
+
+            Rotation secondRotation = calculateOutwardRotation(roadSide);
+            String category = chooseCategory(random);
+            String buildingName = chooseBuilding(random, category);
+
+            if (buildingName == null) continue;
+
+            BuildingSlot secondSlot = new BuildingSlot(
+                    secondLayerPos,
+                    secondRotation,
+                    roadSide,
+                    category,
+                    buildingName
+            );
+
+            slots.add(secondSlot);
+            occupiedSlots.put(secondLayerPos, secondSlot);
+        }
+    }
+
+    private static void allocatePlatforms(
+            List<BuildingSlot> allBuildings,
+            Map<BlockPos, BuildingSlot> occupiedSlots,
+            List<BuildingSlot> slots
+    ) {
+        for (BuildingSlot building : allBuildings) {
+            if (building.category().equals(PLATFORM_CATEGORY)) continue;
+
+            for (Direction side : Direction.values()) {
+                if (side.getAxis().isVertical()) continue;
+
+                BlockPos platformPos = RoadNetwork.getNextPosition(building.position(), side, GeneratorConfig.BUILDING_DISTANCE);
+
+                if (occupiedSlots.containsKey(platformPos)) continue;
+
+                Rotation platformRotation = calculateOutwardRotation(side);
+
+                BuildingSlot platformSlot = new BuildingSlot(
+                        platformPos,
+                        platformRotation,
+                        side,
+                        PLATFORM_CATEGORY,
+                        PLATFORM_NAME
+                );
+
+                slots.add(platformSlot);
+                occupiedSlots.put(platformPos, platformSlot);
+            }
+        }
+    }
+
     private static Direction detectRoadDirection(
             BlockPos pos,
             Set<BlockPos> straightPositions,
@@ -111,7 +185,7 @@ public class BuildingSlotAllocator {
 
         if (occupiedSlots.containsKey(buildingPos)) return;
 
-        Rotation rotation = calculateRotation(side);
+        Rotation rotation = calculateBuildingRotation(side);
         String category = chooseCategory(random);
         String buildingName = chooseBuilding(random, category);
 
@@ -132,12 +206,22 @@ public class BuildingSlotAllocator {
         occupiedSlots.put(buildingPos, slot);
     }
 
-    private static Rotation calculateRotation(Direction roadSide) {
+    private static Rotation calculateBuildingRotation(Direction roadSide) {
         return switch (roadSide) {
             case EAST -> Rotation.COUNTERCLOCKWISE_90;
             case WEST -> Rotation.CLOCKWISE_90;
             case SOUTH -> Rotation.NONE;
             case NORTH -> Rotation.CLOCKWISE_180;
+            default -> Rotation.NONE;
+        };
+    }
+
+    private static Rotation calculateOutwardRotation(Direction side) {
+        return switch (side) {
+            case NORTH -> Rotation.CLOCKWISE_180;
+            case SOUTH -> Rotation.NONE;
+            case EAST -> Rotation.COUNTERCLOCKWISE_90;
+            case WEST -> Rotation.CLOCKWISE_90;
             default -> Rotation.NONE;
         };
     }

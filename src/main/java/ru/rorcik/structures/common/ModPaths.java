@@ -10,6 +10,7 @@ public final class ModPaths {
     public static final String STRUCTURES_CITIES_PLAINS = "structures/cities/plains";
     public static final String STRUCTURES_CITIES_PLAINS_ROOMS = "structures/cities/plains/rooms";
     public static final String STRUCTURES_CITIES_PLAINS_ROADS = "structures/cities/plains/roads";
+    public static final String STRUCTURES_CITIES_PLAINS_PLATFORMS = "structures/cities/plains/platforms";
 
     public static String houseNbtPath(String houseNbt) {
         return RorcikStructuresMod.MODID + ":cities/plains/houses/" + houseNbt;
@@ -25,5 +26,9 @@ public final class ModPaths {
 
     public static String buildingNbtPath(String category, String buildingName) {
         return RorcikStructuresMod.MODID + ":cities/plains/" + category + "/" + buildingName;
+    }
+
+    public static String platformNbtPath(String platformName) {
+        return RorcikStructuresMod.MODID + ":cities/plains/platforms/" + platformName;
     }
 }
