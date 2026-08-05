@@ -51,12 +51,12 @@ public class HouseGenerator implements IStructureGenerator {
         BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(origin, config);
         BlockPos housePlacementOrigin = HousePositionCalculator.calculatePlacementOrigin(houseOrigin, houseRotation, houseSizeX, houseSizeZ);
 
-        int houseDecor = (forcedDecor >= 0) ? forcedDecor : random.nextInt(config.houseDecorCount());
+        int houseDecor = (forcedDecor >= 0) ? forcedDecor : (config.houseDecorCount() > 0 ? random.nextInt(config.houseDecorCount()) : 0);
         String houseNbt = houseType + "_" + houseDecor;
 
-        StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseType, houseNbt), houseRotation, false, false);
+        StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseNbt), houseRotation, false, false);;
 
-        HouseRoomPlacer.placeRooms(level, config, houseOrigin, houseRotation, random);
+        RoomPlacer.placeRooms(level, config, houseOrigin, houseRotation, random);
 
         BlockPos maxPos = housePlacementOrigin.offset(houseSizeX - 1, houseSizeY - 1, houseSizeZ - 1);
         updateNeighborsAndLight(level, housePlacementOrigin, maxPos);
@@ -79,7 +79,7 @@ public class HouseGenerator implements IStructureGenerator {
 
         BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(origin, config);
 
-        HouseRoomPlacer.placeRooms(level, config, houseOrigin, houseRotation, random);
+        RoomPlacer.placeRooms(level, config, houseOrigin, houseRotation, random);
 
         BlockPos maxPos = houseOrigin.offset(houseSizeX - 1, houseSizeY - 1, houseSizeZ - 1);
         updateNeighborsAndLight(level, houseOrigin, maxPos);

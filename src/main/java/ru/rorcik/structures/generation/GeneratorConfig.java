@@ -10,7 +10,7 @@ public final class GeneratorConfig {
     // Road graphs
     public static final int INITIAL_STRAIGHT_COUNT = 2;
     public static final int STRAIGHT_BETWEEN_NODES = 2;
-    public static final int MAX_DEPTH = 7;
+    public static final int MAX_DEPTH = 6;
     public static final int MAX_NODES = 70;
 
 

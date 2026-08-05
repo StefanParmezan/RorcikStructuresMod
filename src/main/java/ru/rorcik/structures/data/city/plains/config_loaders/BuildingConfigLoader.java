@@ -21,8 +21,27 @@ public class BuildingConfigLoader implements IConfigLoader {
     public static void loadConfigs(ResourceManager resourceManager) {
         BUILDING_REGISTRY.clear();
 
-        String basePath = ModPaths.STRUCTURES_CITIES_PLAINS_BUILDINGS;
-        String[] categories = {"houses", "lootable", "other"};
+        // Houses — из конфигов (a.json, b.json...)
+        List<String> houseTypes = new ArrayList<>();
+        Map<ResourceLocation, Resource> houseConfigs = resourceManager.listResources(
+                ModPaths.CONFIGS_CITIES_PLAINS_HOUSES,
+                path -> path.getPath().endsWith(".json")
+        );
+        for (ResourceLocation location : houseConfigs.keySet()) {
+            String path = location.getPath();
+            String name = path.substring(path.lastIndexOf('/') + 1);
+            if (name.endsWith(".json")) {
+                houseTypes.add(name.substring(0, name.length() - 5));
+            }
+        }
+        if (!houseTypes.isEmpty()) {
+            BUILDING_REGISTRY.put("houses", houseTypes);
+            LOGGER.info("Loaded {} house types: {}", houseTypes.size(), houseTypes);
+        }
+
+        // Остальные категории — из structures
+        String basePath = ModPaths.STRUCTURES_CITIES_PLAINS;
+        String[] categories = {"lootable", "other", "parks"};
 
         for (String category : categories) {
             List<String> buildings = new ArrayList<>();
@@ -43,7 +62,7 @@ public class BuildingConfigLoader implements IConfigLoader {
 
             if (!buildings.isEmpty()) {
                 BUILDING_REGISTRY.put(category, buildings);
-                LOGGER.info("Loaded {} buildings in category '{}'", buildings.size(), category);
+                LOGGER.info("Loaded {} buildings in category '{}': {}", buildings.size(), category, buildings);
             }
         }
     }

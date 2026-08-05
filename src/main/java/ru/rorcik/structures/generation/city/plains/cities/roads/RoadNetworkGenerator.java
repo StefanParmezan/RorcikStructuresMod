@@ -33,7 +33,7 @@ public class RoadNetworkGenerator {
         RoadNetwork network = new RoadNetwork();
         placeGraph(level, network, random, root, new HashSet<>());
 
-        BuildingGenerator.generateBuildings(level, nodeMap, random);
+        BuildingGenerator.generateBuildings(level, nodeMap, straightPositions, random);
 
         LOGGER.info("Generated road network with {} segments ({} nodes)", network.size(), nodeMap.size());
     }

@@ -9,7 +9,7 @@ import ru.rorcik.structures.data.city.plains.containers.HouseConfig;
 import ru.rorcik.structures.data.city.plains.containers.RoomSlot;
 import ru.rorcik.structures.generation.StructureUtils;
 
-public class HouseRoomPlacer {
+public class RoomPlacer {
     public static void placeRooms(ServerLevel level, HouseConfig config, BlockPos houseOrigin, Rotation houseRotation, RandomSource random) {
         int houseSizeX = config.size()[0];
         int houseSizeZ = config.size()[2];
@@ -32,7 +32,7 @@ public class HouseRoomPlacer {
                 int floor = slot.startFloor() + i;
                 int y = config.firstFloorOffset() + (floor * config.floorHeight());
 
-                int decor = random.nextInt(slot.decorCount());
+                int decor = slot.decorCount() > 0 ? random.nextInt(slot.decorCount()) : 0;
                 String variant = slot.variant();
 
                 String roomNbt;

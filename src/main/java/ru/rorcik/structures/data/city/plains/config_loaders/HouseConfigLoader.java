@@ -84,21 +84,25 @@ public class HouseConfigLoader implements IConfigLoader {
 
     private static int countHouseDecorations(ResourceManager resourceManager, String houseType) {
         int maxDecor = -1;
+        String housesPath = ModPaths.STRUCTURES_CITIES_PLAINS + "/houses";
         Map<ResourceLocation, Resource> resources = resourceManager.listResources(
-                ModPaths.STRUCTURES_CITIES_PLAINS_HOUSES + "/" + houseType,
+                housesPath,
                 path -> path.getPath().endsWith(".nbt")
         );
 
-        for (ResourceLocation location : resources.keySet()) {
-            String fileName = location.getPath();
-            String prefix = houseType + "_";
-            int prefixIndex = fileName.indexOf(prefix);
+        String prefix = houseType + "_";
 
-            if (prefixIndex >= 0) {
-                String numberPart = fileName.substring(prefixIndex + prefix.length()).replace(".nbt", "");
-                try {
+        for (ResourceLocation location : resources.keySet()) {
+            String path = location.getPath();
+            if (!path.startsWith(housesPath + "/")) continue;
+
+            String simpleName = path.substring(path.lastIndexOf('/') + 1);
+
+            if (simpleName.startsWith(prefix) && simpleName.endsWith(".nbt")) {
+                String numberPart = simpleName.substring(prefix.length(), simpleName.length() - 4);
+                if (numberPart.matches("\\d+")) {
                     maxDecor = Math.max(maxDecor, Integer.parseInt(numberPart));
-                } catch (NumberFormatException ignored) {}
+                }
             }
         }
         return maxDecor + 1;
@@ -106,23 +110,26 @@ public class HouseConfigLoader implements IConfigLoader {
 
     private static int countRoomDecorations(ResourceManager resourceManager, String houseType, String roomNbt) {
         int maxDecor = -1;
+        String roomsPath = ModPaths.STRUCTURES_CITIES_PLAINS_ROOMS + "/" + houseType;
         Map<ResourceLocation, Resource> resources = resourceManager.listResources(
-                ModPaths.STRUCTURES_CITIES_PLAINS_ROOMS + "/" + houseType,
+                roomsPath,
                 path -> path.getPath().endsWith(".nbt") && path.getPath().contains(roomNbt + "_")
         );
 
-        for (ResourceLocation location : resources.keySet()) {
-            String fileName = location.getPath();
-            String prefix = roomNbt + "_";
-            int prefixIndex = fileName.indexOf(prefix);
+        String prefix = roomNbt + "_";
 
-            if (prefixIndex >= 0) {
-                String afterPrefix = fileName.substring(prefixIndex + prefix.length())
-                        .replace(".nbt", "")
+        for (ResourceLocation location : resources.keySet()) {
+            String path = location.getPath();
+            if (!path.startsWith(roomsPath + "/")) continue;
+
+            String simpleName = path.substring(path.lastIndexOf('/') + 1);
+
+            if (simpleName.startsWith(prefix) && simpleName.endsWith(".nbt")) {
+                String afterPrefix = simpleName.substring(prefix.length(), simpleName.length() - 4)
                         .replaceAll("_[vg]+$", "");
-                try {
+                if (afterPrefix.matches("\\d+")) {
                     maxDecor = Math.max(maxDecor, Integer.parseInt(afterPrefix));
-                } catch (NumberFormatException ignored) {}
+                }
             }
         }
         return maxDecor + 1;
