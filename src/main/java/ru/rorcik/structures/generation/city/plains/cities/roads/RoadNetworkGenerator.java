@@ -52,23 +52,10 @@ public class RoadNetworkGenerator {
 
         List<Direction> connections = node.getAllConnections();
 
-        if (node.isTerminal() || connections.isEmpty()) {
-            if (!connections.isEmpty()) {
-                RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
-                if (entry != null) {
-                    RoadPlacer.createAndPlaceRoad(level, network, entry.type(), node.position(), entry.rotation(), random);
-                } else {
-                    RoadPlacer.placeStopRoad(level, network, random, node.position(), connections.get(0));
-                }
-            } else {
-                RoadPlacer.placeStopRoad(level, network, random, node.position(), Direction.NORTH);
-            }
-        } else {
+        if (!connections.isEmpty()) {
             RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
             if (entry != null) {
                 RoadPlacer.createAndPlaceRoad(level, network, entry.type(), node.position(), entry.rotation(), random);
-            } else {
-                RoadPlacer.placeStopRoad(level, network, random, node.position(), connections.get(0));
             }
         }
 

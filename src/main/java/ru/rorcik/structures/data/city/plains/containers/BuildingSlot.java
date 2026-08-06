@@ -9,5 +9,6 @@ public record BuildingSlot(
         Rotation rotation,
         Direction roadSide,
         String category,
-        String buildingName
+        String buildingName,
+        int maxDepth
 ) {}

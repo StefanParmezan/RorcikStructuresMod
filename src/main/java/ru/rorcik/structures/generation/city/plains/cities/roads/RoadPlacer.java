@@ -29,22 +29,6 @@ public class RoadPlacer {
         }
     }
 
-    static void placeStopRoad(
-            ServerLevel level,
-            RoadNetwork network,
-            RandomSource random,
-            BlockPos position,
-            Direction incomingDir
-    ) {
-        Direction entryConnection = incomingDir.getOpposite();
-        RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(List.of(entryConnection));
-        if (entry != null) {
-            createAndPlaceRoad(level, network, entry.type(), position, entry.rotation(), random);
-        }
-    }
-
-
-
     static RoadSegment createAndPlaceRoad(
             ServerLevel level,
             RoadNetwork network,

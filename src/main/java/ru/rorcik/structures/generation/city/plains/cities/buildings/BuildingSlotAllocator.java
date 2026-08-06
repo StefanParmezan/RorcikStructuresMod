@@ -34,14 +34,16 @@ public class BuildingSlotAllocator {
         allocateFromNodes(nodeMap, occupiedSlots, slots, random);
         allocateFromStraights(nodeMap, straightPositions, occupiedSlots, slots, random);
 
-        List<BuildingSlot> firstLayer = new ArrayList<>(slots);
-        allocateSecondLayer(firstLayer, occupiedSlots, slots, random);
+        List<BuildingSlot> currentLayer = new ArrayList<>(slots);
+        for (int depth = 1; depth < GeneratorConfig.BUILDING_MAX_DEPTH; depth++) {
+            List<BuildingSlot> nextLayer = allocateNextLayer(currentLayer, occupiedSlots, slots, random, depth);
+            currentLayer = nextLayer;
+        }
 
         List<BuildingSlot> allBuildings = new ArrayList<>(slots);
-        allocatePlatforms(allBuildings, occupiedSlots, slots);
+        allocatePlatforms(allBuildings, slots);
 
-        LOGGER.info("Allocated {} slots ({} first layer, total nodes: {})",
-                slots.size(), firstLayer.size(), nodeMap.size());
+        LOGGER.info("Allocated {} slots (total nodes: {})", slots.size(), nodeMap.size());
 
         return slots;
     }
@@ -98,40 +100,49 @@ public class BuildingSlotAllocator {
         }
     }
 
-    private static void allocateSecondLayer(
-            List<BuildingSlot> firstLayer,
+    private static List<BuildingSlot> allocateNextLayer(
+            List<BuildingSlot> previousLayer,
             Map<BlockPos, BuildingSlot> occupiedSlots,
             List<BuildingSlot> slots,
-            RandomSource random
+            RandomSource random,
+            int currentDepth
     ) {
-        for (BuildingSlot firstSlot : firstLayer) {
-            Direction roadSide = firstSlot.roadSide();
-            BlockPos secondLayerPos = RoadNetwork.getNextPosition(firstSlot.position(), roadSide, GeneratorConfig.BUILDING_DISTANCE);
+        List<BuildingSlot> nextLayer = new ArrayList<>();
 
-            if (occupiedSlots.containsKey(secondLayerPos)) continue;
+        for (BuildingSlot prevSlot : previousLayer) {
+            if (prevSlot.category().equals(PLATFORM_CATEGORY)) continue;
+            if (currentDepth >= prevSlot.maxDepth()) continue;
 
-            Rotation secondRotation = calculateOutwardRotation(roadSide);
+            Direction roadSide = prevSlot.roadSide();
+            BlockPos nextLayerPos = RoadNetwork.getNextPosition(prevSlot.position(), roadSide, GeneratorConfig.BUILDING_DISTANCE);
+
+            if (occupiedSlots.containsKey(nextLayerPos)) continue;
+
+            Rotation nextRotation = calculateOutwardRotation(roadSide);
             String category = chooseCategory(random);
             String buildingName = chooseBuilding(random, category);
 
             if (buildingName == null) continue;
 
-            BuildingSlot secondSlot = new BuildingSlot(
-                    secondLayerPos,
-                    secondRotation,
+            BuildingSlot nextSlot = new BuildingSlot(
+                    nextLayerPos,
+                    nextRotation,
                     roadSide,
                     category,
-                    buildingName
+                    buildingName,
+                    prevSlot.maxDepth()
             );
 
-            slots.add(secondSlot);
-            occupiedSlots.put(secondLayerPos, secondSlot);
+            nextLayer.add(nextSlot);
+            slots.add(nextSlot);
+            occupiedSlots.put(nextLayerPos, nextSlot);
         }
+
+        return nextLayer;
     }
 
     private static void allocatePlatforms(
             List<BuildingSlot> allBuildings,
-            Map<BlockPos, BuildingSlot> occupiedSlots,
             List<BuildingSlot> slots
     ) {
         for (BuildingSlot building : allBuildings) {
@@ -142,8 +153,6 @@ public class BuildingSlotAllocator {
 
                 BlockPos platformPos = RoadNetwork.getNextPosition(building.position(), side, GeneratorConfig.BUILDING_DISTANCE);
 
-                if (occupiedSlots.containsKey(platformPos)) continue;
-
                 Rotation platformRotation = calculateOutwardRotation(side);
 
                 BuildingSlot platformSlot = new BuildingSlot(
@@ -151,11 +160,11 @@ public class BuildingSlotAllocator {
                         platformRotation,
                         side,
                         PLATFORM_CATEGORY,
-                        PLATFORM_NAME
+                        PLATFORM_NAME,
+                        0
                 );
 
                 slots.add(platformSlot);
-                occupiedSlots.put(platformPos, platformSlot);
             }
         }
     }
@@ -194,12 +203,17 @@ public class BuildingSlotAllocator {
             return;
         }
 
+        int maxDepth = GeneratorConfig.BUILDING_MIN_DEPTH + random.nextInt(
+                GeneratorConfig.BUILDING_MAX_DEPTH - GeneratorConfig.BUILDING_MIN_DEPTH + 1
+        );
+
         BuildingSlot slot = new BuildingSlot(
                 buildingPos,
                 rotation,
                 side,
                 category,
-                buildingName
+                buildingName,
+                maxDepth
         );
 
         slots.add(slot);
@@ -227,12 +241,17 @@ public class BuildingSlotAllocator {
     }
 
     private static String chooseCategory(RandomSource random) {
-        int roll = random.nextInt(3);
-        return switch (roll) {
-            case 0 -> "houses";
-            case 1 -> "lootable";
-            default -> "other";
-        };
+        int roll = random.nextInt(100);
+
+        if (roll < GeneratorConfig.HOUSES_CHANCE) {
+            return "houses";
+        } else if (roll < GeneratorConfig.HOUSES_CHANCE + GeneratorConfig.OTHER_CHANCE) {
+            return "other";
+        } else if (roll < GeneratorConfig.HOUSES_CHANCE + GeneratorConfig.OTHER_CHANCE + GeneratorConfig.LOOTABLE_CHANCE) {
+            return "lootable";
+        } else {
+            return "houses";
+        }
     }
 
     private static String chooseBuilding(RandomSource random, String category) {

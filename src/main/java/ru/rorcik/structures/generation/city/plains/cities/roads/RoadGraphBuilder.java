@@ -7,6 +7,7 @@ import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 import ru.rorcik.structures.data.city.plains.containers.RoadNode;
 import ru.rorcik.structures.generation.GeneratorConfig;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -16,6 +17,18 @@ public class RoadGraphBuilder {
             RandomSource random,
             BlockPos startPos,
             Direction direction,
+            int depth,
+            Map<BlockPos, RoadNode> nodeMap,
+            Set<BlockPos> straightPositions
+    ) {
+        return buildGraphRecursive(random, startPos, direction, direction, depth, nodeMap, straightPositions);
+    }
+
+    private static RoadNode buildGraphRecursive(
+            RandomSource random,
+            BlockPos startPos,
+            Direction direction,
+            Direction initialDirection,
             int depth,
             Map<BlockPos, RoadNode> nodeMap,
             Set<BlockPos> straightPositions
@@ -53,6 +66,14 @@ public class RoadGraphBuilder {
             return node;
         }
 
+        if (depth == 0) {
+            Direction opposite = initialDirection.getOpposite();
+            if (!exits.contains(opposite)) {
+                exits = new ArrayList<>(exits);
+                exits.add(opposite);
+            }
+        }
+
         for (Direction exit : exits) {
             BlockPos currentPos = startPos;
             for (int i = 0; i < GeneratorConfig.STRAIGHT_BETWEEN_NODES; i++) {
@@ -62,7 +83,7 @@ public class RoadGraphBuilder {
 
             BlockPos childPos = RoadNetwork.getNextPosition(currentPos, exit, GeneratorConfig.ROAD_STEP);
 
-            RoadNode child = buildGraph(random, childPos, exit, depth + 1, nodeMap, straightPositions);
+            RoadNode child = buildGraphRecursive(random, childPos, exit, initialDirection, depth + 1, nodeMap, straightPositions);
 
             if (child != node) {
                 node.addExit(exit, child);
