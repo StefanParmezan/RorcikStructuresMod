@@ -26,10 +26,15 @@ public class BuildingSlotAllocator {
     public static List<BuildingSlot> allocateSlots(
             Map<BlockPos, RoadNode> nodeMap,
             Set<BlockPos> straightPositions,
+            Set<BlockPos> parkOccupiedSlots,
             RandomSource random
     ) {
         Map<BlockPos, BuildingSlot> occupiedSlots = new HashMap<>();
         List<BuildingSlot> slots = new ArrayList<>();
+
+        for (BlockPos parkPos : parkOccupiedSlots) {
+            occupiedSlots.put(parkPos, null);
+        }
 
         allocateFromNodes(nodeMap, occupiedSlots, slots, random);
         allocateFromStraights(nodeMap, straightPositions, occupiedSlots, slots, random);
@@ -247,10 +252,8 @@ public class BuildingSlotAllocator {
             return "houses";
         } else if (roll < GeneratorConfig.HOUSES_CHANCE + GeneratorConfig.OTHER_CHANCE) {
             return "other";
-        } else if (roll < GeneratorConfig.HOUSES_CHANCE + GeneratorConfig.OTHER_CHANCE + GeneratorConfig.LOOTABLE_CHANCE) {
-            return "lootable";
         } else {
-            return "houses";
+            return "lootable";
         }
     }
 

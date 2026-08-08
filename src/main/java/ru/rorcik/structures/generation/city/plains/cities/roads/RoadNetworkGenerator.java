@@ -13,6 +13,7 @@ import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 import ru.rorcik.structures.data.city.plains.containers.RoadNode;
 import ru.rorcik.structures.generation.GeneratorConfig;
 import ru.rorcik.structures.generation.city.plains.cities.buildings.BuildingGenerator;
+import ru.rorcik.structures.generation.city.plains.cities.buildings.ParkPlacer;
 
 import java.util.*;
 
@@ -33,7 +34,7 @@ public class RoadNetworkGenerator {
         RoadNetwork network = new RoadNetwork();
         placeGraph(level, network, random, root, new HashSet<>());
 
-        BuildingGenerator.generateBuildings(level, nodeMap, straightPositions, random);
+        BuildingGenerator.generateBuildings(level, network, nodeMap, straightPositions, random);;
 
         LOGGER.info("Generated road network with {} segments ({} nodes)", network.size(), nodeMap.size());
     }

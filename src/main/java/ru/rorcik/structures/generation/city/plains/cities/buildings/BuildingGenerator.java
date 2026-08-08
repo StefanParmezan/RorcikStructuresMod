@@ -9,9 +9,12 @@ import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.api.IStructureGenerator;
 import ru.rorcik.structures.common.ModPaths;
 import ru.rorcik.structures.data.city.plains.containers.BuildingSlot;
+import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 import ru.rorcik.structures.data.city.plains.containers.RoadNode;
+import ru.rorcik.structures.generation.GeneratorConfig;
 import ru.rorcik.structures.generation.StructureUtils;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,11 +38,22 @@ public class BuildingGenerator implements IStructureGenerator {
 
     public static void generateBuildings(
             ServerLevel level,
+            RoadNetwork network,
             Map<BlockPos, RoadNode> nodeMap,
             Set<BlockPos> straightPositions,
             RandomSource random
     ) {
-        List<BuildingSlot> slots = BuildingSlotAllocator.allocateSlots(nodeMap, straightPositions, random);
+        Set<BlockPos> parkOccupiedSlots = new HashSet<>();
+
+        if (GeneratorConfig.SPAWN_PARKS) {
+            parkOccupiedSlots = ParkPlacer.placeParks(
+                    level, network, nodeMap, straightPositions, random
+            );
+        }
+
+        List<BuildingSlot> slots = BuildingSlotAllocator.allocateSlots(
+                nodeMap, straightPositions, parkOccupiedSlots, random
+        );
 
         for (BuildingSlot slot : slots) {
             BuildingPlacer.placeBuilding(level, slot);

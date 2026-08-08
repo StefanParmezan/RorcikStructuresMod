@@ -16,6 +16,7 @@ import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.generation.city.plains.cities.CityGenerator;
+import ru.rorcik.structures.generation.city.plains.cities.buildings.ParkTestGenerator;
 import ru.rorcik.structures.generation.city.plains.houses.HouseGenerator;
 import ru.rorcik.structures.generation.city.plains.cities.roads.RoadPlacer;
 
@@ -33,6 +34,7 @@ public class ModCommands {
         registerHouseCommands(dispatcher);
         registerRoadCommands(dispatcher);
         registerCityCommands(dispatcher);
+        registerParkCommands(dispatcher);
     }
 
     private static void registerHouseCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
@@ -204,6 +206,33 @@ public class ModCommands {
                                     Component.literal("Generating city at " + pos.toShortString()), true);
                             return 1;
                         })
+        );
+    }
+
+    private static void registerParkCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(
+                Commands.literal("testpark")
+                        .then(Commands.argument("direction", IntegerArgumentType.integer(0, 3))
+                                .then(Commands.argument("parkIndex", IntegerArgumentType.integer(0))
+                                        .executes(ctx -> {
+                                            int dirValue = IntegerArgumentType.getInteger(ctx, "direction");
+                                            int parkIndex = IntegerArgumentType.getInteger(ctx, "parkIndex");
+                                            Direction roadDirection = Direction.from2DDataValue(dirValue);
+                                            ServerLevel level = ctx.getSource().getLevel();
+                                            BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
+                                            long seed = level.getSeed();
+
+                                            LOGGER.info("Testing park at {} (road direction: {}, park index: {})",
+                                                    pos.toShortString(), roadDirection, parkIndex);
+
+                                            ParkTestGenerator.generateTestPark(level, pos, seed, roadDirection, parkIndex);
+
+                                            ctx.getSource().sendSuccess(() ->
+                                                    Component.literal("Testing park (direction: " + roadDirection + ", park: " + parkIndex + ")"), true);
+                                            return 1;
+                                        })
+                                )
+                        )
         );
     }
 

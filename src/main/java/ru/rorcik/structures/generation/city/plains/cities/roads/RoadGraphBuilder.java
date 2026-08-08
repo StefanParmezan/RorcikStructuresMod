@@ -33,7 +33,7 @@ public class RoadGraphBuilder {
             Map<BlockPos, RoadNode> nodeMap,
             Set<BlockPos> straightPositions
     ) {
-        if (depth > GeneratorConfig.MAX_DEPTH || nodeMap.size() >= GeneratorConfig.MAX_NODES) {
+        if (depth > GeneratorConfig.MAX_GRAPH_DEPTH || nodeMap.size() >= GeneratorConfig.MAX_NODES) {
             RoadNode deadEnd = new RoadNode(startPos, direction, depth);
             deadEnd.markTerminal();
             return deadEnd;
@@ -94,7 +94,7 @@ public class RoadGraphBuilder {
     }
 
     static int chooseExitWithDepth(RandomSource random, int depth) {
-        double endChance = (double) depth / GeneratorConfig.MAX_DEPTH;
+        double endChance = (double) depth / GeneratorConfig.MAX_GRAPH_DEPTH;
 
         if (random.nextDouble() < endChance) {
             return 0;

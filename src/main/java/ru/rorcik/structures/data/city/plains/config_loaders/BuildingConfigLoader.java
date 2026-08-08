@@ -21,7 +21,6 @@ public class BuildingConfigLoader implements IConfigLoader {
     public static void loadConfigs(ResourceManager resourceManager) {
         BUILDING_REGISTRY.clear();
 
-        // Houses — из конфигов (a.json, b.json...)
         List<String> houseTypes = new ArrayList<>();
         Map<ResourceLocation, Resource> houseConfigs = resourceManager.listResources(
                 ModPaths.CONFIGS_CITIES_PLAINS_HOUSES,
@@ -39,9 +38,8 @@ public class BuildingConfigLoader implements IConfigLoader {
             LOGGER.info("Loaded {} house types: {}", houseTypes.size(), houseTypes);
         }
 
-        // Остальные категории — из structures
         String basePath = ModPaths.STRUCTURES_CITIES_PLAINS;
-        String[] categories = {"lootable", "other", "parks"};
+        String[] categories = {"lootable", "other"};
 
         for (String category : categories) {
             List<String> buildings = new ArrayList<>();

@@ -29,7 +29,7 @@ public class RoadPlacer {
         }
     }
 
-    static RoadSegment createAndPlaceRoad(
+    public static RoadSegment createAndPlaceRoad(
             ServerLevel level,
             RoadNetwork network,
             String type,
@@ -88,7 +88,7 @@ public class RoadPlacer {
         );
     }
 
-    static Rotation directionToRotation(Direction direction) {
+    public static Rotation directionToRotation(Direction direction) {
         return switch (direction) {
             case SOUTH -> Rotation.NONE;
             case WEST -> Rotation.CLOCKWISE_90;

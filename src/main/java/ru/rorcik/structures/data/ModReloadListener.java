@@ -33,6 +33,7 @@ public class ModReloadListener {
         HouseConfigLoader.clear();
         RoadConfigLoader.clear();
         BuildingConfigLoader.clear();
+        ParkConfigLoader.clear();
     }
 
     private static class StructureDataReloader implements PreparableReloadListener {
@@ -49,8 +50,8 @@ public class ModReloadListener {
                 HouseConfigLoader.loadConfigs(resourceManager);
                 RoadConfigLoader.loadConfigs(resourceManager);
                 BuildingConfigLoader.loadConfigs(resourceManager);
+                ParkConfigLoader.loadConfigs(resourceManager);
                 StructureCache.loadRawNbt(resourceManager);
-            }, backgroundExecutor).thenCompose(preparationBarrier::wait);
-        }
+            }, backgroundExecutor).thenCompose(preparationBarrier::wait);        }
     }
 }
