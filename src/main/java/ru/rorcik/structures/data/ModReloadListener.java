@@ -10,6 +10,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.city.plains.config_loaders.*;
+import ru.rorcik.structures.generation.city.plains.cities.CityBuildScheduler;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -34,6 +35,7 @@ public class ModReloadListener {
         RoadConfigLoader.clear();
         BuildingConfigLoader.clear();
         ParkConfigLoader.clear();
+        CityBuildScheduler.reset();
     }
 
     private static class StructureDataReloader implements PreparableReloadListener {

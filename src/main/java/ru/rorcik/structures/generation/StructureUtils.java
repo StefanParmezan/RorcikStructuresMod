@@ -45,7 +45,30 @@ public final class StructureUtils {
         };
     }
 
+    /**
+     * Старый путь размещения — не трогаем,
+     * чтобы не рисковать уже работающими домами и дорогами.
+     */
     public static void placeStructure(ServerLevel level, BlockPos origin, String nbtPath, Rotation rotation, boolean mirrorX, boolean mirrorZ) {
+        placeStructureInternal(level, origin, nbtPath, rotation, mirrorX, mirrorZ, false);
+    }
+
+    /**
+     * Новый безопасный путь для парков/прямоугольных структур.
+     */
+    public static void placeStructureUsingOriginPivot(ServerLevel level, BlockPos origin, String nbtPath, Rotation rotation, boolean mirrorX, boolean mirrorZ) {
+        placeStructureInternal(level, origin, nbtPath, rotation, mirrorX, mirrorZ, true);
+    }
+
+    private static void placeStructureInternal(
+            ServerLevel level,
+            BlockPos origin,
+            String nbtPath,
+            Rotation rotation,
+            boolean mirrorX,
+            boolean mirrorZ,
+            boolean pivotAtOrigin
+    ) {
         ResourceLocation location = ResourceLocation.tryParse(nbtPath);
         if (location == null) {
             LOGGER.error("Invalid resource location: {}", nbtPath);
@@ -74,6 +97,8 @@ public final class StructureUtils {
         }
 
         BlockPos size = new BlockPos(template.getSize());
-        template.placeInWorld(level, origin, origin.offset(size), settings, level.getRandom(), 18);
+        BlockPos pivot = pivotAtOrigin ? origin : origin.offset(size);
+
+        template.placeInWorld(level, origin, pivot, settings, level.getRandom(), 18);
     }
 }

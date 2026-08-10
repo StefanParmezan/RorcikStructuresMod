@@ -6,14 +6,13 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Rotation;
-import net.minecraft.world.level.chunk.ChunkStatus;
 import org.slf4j.Logger;
 import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 import ru.rorcik.structures.data.city.plains.containers.RoadNode;
 import ru.rorcik.structures.generation.GeneratorConfig;
+import ru.rorcik.structures.generation.city.plains.cities.CityBuildScheduler;
 import ru.rorcik.structures.generation.city.plains.cities.buildings.BuildingGenerator;
-import ru.rorcik.structures.generation.city.plains.cities.buildings.ParkPlacer;
 
 import java.util.*;
 
@@ -29,26 +28,43 @@ public class RoadNetworkGenerator {
 
         RoadNode root = RoadGraphBuilder.buildGraph(random, origin, Direction.SOUTH, 0, nodeMap, straightPositions);
 
-        preloadChunksAlongPath(level, nodeMap.keySet(), straightPositions);
+        Set<Long> chunkKeys = collectChunkKeys(nodeMap.keySet(), straightPositions);
 
-        RoadNetwork network = new RoadNetwork();
-        placeGraph(level, network, random, root, new HashSet<>());
+        LOGGER.info("Graph built: {} nodes, {} straights, {} chunks needed",
+                nodeMap.size(), straightPositions.size(), chunkKeys.size());
 
-        BuildingGenerator.generateBuildings(level, network, nodeMap, straightPositions, random);;
+        // Фаза 1: запускаем батчевую загрузку чанков
+        CityBuildScheduler.scheduleChunkLoading(chunkKeys, () -> {
+            // Фаза 2: когда чанки загружены — строим
+            LOGGER.info("Chunks ready, building city...");
 
-        LOGGER.info("Generated road network with {} segments ({} nodes)", network.size(), nodeMap.size());
+            RoadNetwork network = new RoadNetwork();
+            List<Runnable> buildActions = new ArrayList<>();
+
+            // Собираем действия для дорог
+            collectRoadActions(level, network, random, root, new HashSet<>(), buildActions);
+
+            // Собираем действия для зданий и парков
+            buildActions.add(() -> {
+                BuildingGenerator.generateBuildings(level, network, nodeMap, straightPositions, random);
+            });
+
+            // Запускаем батчевую постройку
+            CityBuildScheduler.scheduleBuildActions(buildActions);
+
+            LOGGER.info("Scheduled {} build actions", buildActions.size());
+        });
     }
 
-    private static void placeGraph(
+    private static void collectRoadActions(
             ServerLevel level,
             RoadNetwork network,
             RandomSource random,
             RoadNode node,
-            Set<BlockPos> placed
+            Set<BlockPos> placed,
+            List<Runnable> actions
     ) {
-        if (placed.contains(node.position())) {
-            return;
-        }
+        if (placed.contains(node.position())) return;
         placed.add(node.position());
 
         List<Direction> connections = node.getAllConnections();
@@ -56,7 +72,10 @@ public class RoadNetworkGenerator {
         if (!connections.isEmpty()) {
             RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
             if (entry != null) {
-                RoadPlacer.createAndPlaceRoad(level, network, entry.type(), node.position(), entry.rotation(), random);
+                BlockPos pos = node.position();
+                String type = entry.type();
+                Rotation rot = entry.rotation();
+                actions.add(() -> RoadPlacer.createAndPlaceRoad(level, network, type, pos, rot, random));
             }
         }
 
@@ -66,67 +85,42 @@ public class RoadNetworkGenerator {
             Rotation sRotation = RoadPlacer.directionToRotation(exitDir);
 
             for (int i = 0; i < GeneratorConfig.STRAIGHT_BETWEEN_NODES; i++) {
-                if (!network.hasSegmentAt(currentPos)) {
-                    RoadPlacer.createAndPlaceRoad(level, network, "s", currentPos, sRotation, random);
+                BlockPos straightPos = currentPos;
+                if (!network.hasSegmentAt(straightPos)) {
+                    actions.add(() -> RoadPlacer.createAndPlaceRoad(level, network, "s", straightPos, sRotation, random));
                 }
                 currentPos = RoadNetwork.getNextPosition(currentPos, exitDir, GeneratorConfig.ROAD_STEP);
             }
 
-            placeGraph(level, network, random, child, placed);
+            collectRoadActions(level, network, random, child, placed, actions);
         }
     }
 
-    private static void preloadChunksAlongPath(ServerLevel level, Set<BlockPos> nodePositions, Set<BlockPos> straightPositions) {
+    private static Set<Long> collectChunkKeys(Set<BlockPos> nodePositions, Set<BlockPos> straightPositions) {
         Set<Long> chunkKeys = new HashSet<>();
 
         for (BlockPos pos : nodePositions) {
-            int baseChunkX = pos.getX() >> 4;
-            int baseChunkZ = pos.getZ() >> 4;
-
-            for (int dx = 0; dx < 4; dx++) {
-                for (int dz = 0; dz < 4; dz++) {
-                    int chunkX = baseChunkX + dx;
-                    int chunkZ = baseChunkZ + dz;
-                    long key = ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
-                    chunkKeys.add(key);
-                }
-            }
+            addChunksForPos(pos, chunkKeys);
         }
 
         for (BlockPos pos : straightPositions) {
-            int baseChunkX = pos.getX() >> 4;
-            int baseChunkZ = pos.getZ() >> 4;
-
-            for (int dx = 0; dx < 4; dx++) {
-                for (int dz = 0; dz < 4; dz++) {
-                    int chunkX = baseChunkX + dx;
-                    int chunkZ = baseChunkZ + dz;
-                    long key = ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
-                    chunkKeys.add(key);
-                }
-            }
+            addChunksForPos(pos, chunkKeys);
         }
 
-        int totalChunks = chunkKeys.size();
-        int totalSegments = nodePositions.size() + straightPositions.size();
+        return chunkKeys;
+    }
 
-        LOGGER.info("Preloading {} chunks for {} segments ({} nodes, {} straights)",
-                totalChunks, totalSegments, nodePositions.size(), straightPositions.size());
+    private static void addChunksForPos(BlockPos pos, Set<Long> chunkKeys) {
+        int baseChunkX = pos.getX() >> 4;
+        int baseChunkZ = pos.getZ() >> 4;
 
-        int loaded = 0;
-        int logInterval = Math.max(1, totalChunks / 5);
-
-        for (long key : chunkKeys) {
-            int chunkX = (int) (key >> 32);
-            int chunkZ = (int) key;
-            level.getChunkSource().getChunk(chunkX, chunkZ, ChunkStatus.FULL, true);
-            loaded++;
-
-            if (loaded % logInterval == 0) {
-                LOGGER.info("Loaded {} / {} chunks ({}%)", loaded, totalChunks, (loaded * 100) / totalChunks);
+        for (int dx = 0; dx < 4; dx++) {
+            for (int dz = 0; dz < 4; dz++) {
+                int chunkX = baseChunkX + dx;
+                int chunkZ = baseChunkZ + dz;
+                long key = ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
+                chunkKeys.add(key);
             }
         }
-
-        LOGGER.info("Chunk preloading complete: {} chunks loaded", loaded);
     }
 }
