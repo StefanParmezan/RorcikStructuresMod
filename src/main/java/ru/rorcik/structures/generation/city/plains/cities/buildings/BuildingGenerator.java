@@ -50,7 +50,6 @@ public class BuildingGenerator implements IStructureGenerator {
     ) {
         List<Runnable> actions = new ArrayList<>();
 
-        // Парки теперь через BuildingSlotAllocator — передаём пустой Set
         List<BuildingSlot> slots = BuildingSlotAllocator.allocateSlots(
                 nodeMap, straightPositions, new HashSet<>(), random
         );

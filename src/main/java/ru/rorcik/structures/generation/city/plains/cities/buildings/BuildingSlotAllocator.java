@@ -63,7 +63,6 @@ public class BuildingSlotAllocator {
         List<BuildingSlot> allBuildings = new ArrayList<>(slots);
         allocatePlatforms(allBuildings, slots, occupiedSlots, roadPositions, parkOccupiedSlots);
 
-        // Платформы вдоль s-дорог на свободных слотах
         allocatePlatformsAlongStraights(straightPositions, nodeMap, slots, occupiedSlots, roadPositions, parkOccupiedSlots);
 
         int platformCount = 0;
@@ -302,10 +301,6 @@ public class BuildingSlotAllocator {
                 platformsAdded, skippedByBuilding, skippedByRoad, skippedByPark, skippedByPlatform);
     }
 
-    /**
-     * Платформы вдоль s-дорог на свободных слотах.
-     * Если сбоку от дороги нет здания — ставим платформу.
-     */
     private static void allocatePlatformsAlongStraights(
             Set<BlockPos> straightPositions,
             Map<BlockPos, RoadNode> nodeMap,

@@ -100,9 +100,6 @@ public final class StructureUtils {
         BlockPos size = new BlockPos(template.getSize());
         BlockPos pivot = pivotAtOrigin ? origin : origin.offset(size);
 
-        // UPDATE_CLIENTS (2) — клиенты видят изменения
-        // UPDATE_SUPPRESS_LIGHT (8) — не пересчитывать свет (быстрее)
-        // БЕЗ UPDATE_NEIGHBORS (1) — не вызывать neighbor updates → трава не спавнится
         int placementFlags = UPDATE_CLIENTS | UPDATE_SUPPRESS_LIGHT;
 
         template.placeInWorld(level, origin, pivot, settings, level.getRandom(), placementFlags);

@@ -224,7 +224,6 @@ public class ModCommands {
                                             LOGGER.info("Test park '{}' rotation={} ({}°) at player {}",
                                                     name, rotation, rotValue * 90, playerPos.toShortString());
 
-                                            // Первый слот парка будет прямо под игроком
                                             ParkPlacer.testPlacePark(level, playerPos, name, rotation);
 
                                             ctx.getSource().sendSuccess(() ->

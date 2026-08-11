@@ -40,9 +40,6 @@ public class BuildingPlacer {
             return;
         }
 
-        // position хранит первую позицию парка (roadPos + side * BUILDING_DISTANCE)
-        // side хранится в roadSide()
-        // Нам нужно вычислить roadPos = position - side * BUILDING_DISTANCE
         BlockPos buildingPos = slot.position();
         Direction side = slot.roadSide();
         BlockPos roadPos = buildingPos.relative(side.getOpposite(), GeneratorConfig.BUILDING_DISTANCE);

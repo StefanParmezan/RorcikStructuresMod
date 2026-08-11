@@ -13,7 +13,6 @@ public final class GeneratorConfig {
     public static final int BUILDING_MIN_DEPTH = 2;
     public static final int BUILDING_MAX_DEPTH = 2;
 
-    // Все шансы в сумме должны давать 100
     public static final int HOUSES_CHANCE = 90;
     public static final int OTHER_CHANCE = 5;
     public static final int LOOTABLE_CHANCE = 3;
