@@ -10,11 +10,18 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.data.StructureCache;
+import ru.rorcik.structures.generation.GeneratorConfig;
 
 import java.util.Optional;
 
 public final class StructureUtils {
     private static final Logger LOGGER = LogUtils.getLogger();
+
+    private static final int UPDATE_NEIGHBORS = 1;
+    private static final int UPDATE_CLIENTS = 2;
+    private static final int UPDATE_INVISIBLE = 4;
+    private static final int UPDATE_SUPPRESS_LIGHT = 8;
+    private static final int UPDATE_SKIP_DROPS = 16;
 
     private StructureUtils() {}
 
@@ -45,17 +52,10 @@ public final class StructureUtils {
         };
     }
 
-    /**
-     * Старый путь размещения — не трогаем,
-     * чтобы не рисковать уже работающими домами и дорогами.
-     */
     public static void placeStructure(ServerLevel level, BlockPos origin, String nbtPath, Rotation rotation, boolean mirrorX, boolean mirrorZ) {
         placeStructureInternal(level, origin, nbtPath, rotation, mirrorX, mirrorZ, false);
     }
 
-    /**
-     * Новый безопасный путь для парков/прямоугольных структур.
-     */
     public static void placeStructureUsingOriginPivot(ServerLevel level, BlockPos origin, String nbtPath, Rotation rotation, boolean mirrorX, boolean mirrorZ) {
         placeStructureInternal(level, origin, nbtPath, rotation, mirrorX, mirrorZ, true);
     }
@@ -82,10 +82,11 @@ public final class StructureUtils {
         }
 
         StructureTemplate template = templateOpt.get();
+
         StructurePlaceSettings settings = new StructurePlaceSettings()
                 .setRotation(rotation)
-                .setKnownShape(true)
-                .setIgnoreEntities(false);
+                .setIgnoreEntities(false)
+                .setKnownShape(true);
 
         if (mirrorX && mirrorZ) {
             settings.setMirror(Mirror.LEFT_RIGHT);
@@ -99,6 +100,11 @@ public final class StructureUtils {
         BlockPos size = new BlockPos(template.getSize());
         BlockPos pivot = pivotAtOrigin ? origin : origin.offset(size);
 
-        template.placeInWorld(level, origin, pivot, settings, level.getRandom(), 18);
+        // UPDATE_CLIENTS (2) — клиенты видят изменения
+        // UPDATE_SUPPRESS_LIGHT (8) — не пересчитывать свет (быстрее)
+        // БЕЗ UPDATE_NEIGHBORS (1) — не вызывать neighbor updates → трава не спавнится
+        int placementFlags = UPDATE_CLIENTS | UPDATE_SUPPRESS_LIGHT;
+
+        template.placeInWorld(level, origin, pivot, settings, level.getRandom(), placementFlags);
     }
 }

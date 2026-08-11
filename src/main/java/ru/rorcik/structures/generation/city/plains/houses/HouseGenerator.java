@@ -4,13 +4,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Rotation;
-import net.minecraft.world.level.block.state.BlockState;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.api.IStructureGenerator;
 import ru.rorcik.structures.common.ModPaths;
 import ru.rorcik.structures.data.city.plains.config_loaders.HouseConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.HouseConfig;
+import ru.rorcik.structures.generation.GeneratorConfig;
 import ru.rorcik.structures.generation.StructureUtils;
 
 public class HouseGenerator implements IStructureGenerator {
@@ -54,12 +54,9 @@ public class HouseGenerator implements IStructureGenerator {
         int houseDecor = (forcedDecor >= 0) ? forcedDecor : (config.houseDecorCount() > 0 ? random.nextInt(config.houseDecorCount()) : 0);
         String houseNbt = houseType + "_" + houseDecor;
 
-        StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseNbt), houseRotation, false, false);;
+        StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseNbt), houseRotation, false, false);
 
         RoomPlacer.placeRooms(level, config, houseOrigin, houseRotation, random);
-
-        BlockPos maxPos = housePlacementOrigin.offset(houseSizeX - 1, houseSizeY - 1, houseSizeZ - 1);
-        updateNeighborsAndLight(level, housePlacementOrigin, maxPos);
     }
 
     private static void generateRoomsOnly(ServerLevel level, BlockPos origin, String houseType, long seed, Rotation houseRotation) {
@@ -73,27 +70,7 @@ public class HouseGenerator implements IStructureGenerator {
         long uniqueSeed = seed ^ origin.hashCode() ^ System.nanoTime() ^ level.getRandom().nextLong();
         RandomSource random = RandomSource.create(uniqueSeed);
 
-        int houseSizeX = config.size()[0];
-        int houseSizeY = config.size()[1];
-        int houseSizeZ = config.size()[2];
-
         BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(origin, config);
-
         RoomPlacer.placeRooms(level, config, houseOrigin, houseRotation, random);
-
-        BlockPos maxPos = houseOrigin.offset(houseSizeX - 1, houseSizeY - 1, houseSizeZ - 1);
-        updateNeighborsAndLight(level, houseOrigin, maxPos);
-    }
-
-    private static void updateNeighborsAndLight(ServerLevel level, BlockPos min, BlockPos max) {
-        for (BlockPos pos : BlockPos.betweenClosed(min, max)) {
-            BlockState state = level.getBlockState(pos);
-            if (!state.isAir()) {
-                level.blockUpdated(pos, state.getBlock());
-                if (state.getLightEmission(level, pos) > 0) {
-                    level.getLightEngine().checkBlock(pos);
-                }
-            }
-        }
     }
 }

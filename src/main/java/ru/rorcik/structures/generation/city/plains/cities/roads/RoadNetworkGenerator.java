@@ -33,26 +33,24 @@ public class RoadNetworkGenerator {
         LOGGER.info("Graph built: {} nodes, {} straights, {} chunks needed",
                 nodeMap.size(), straightPositions.size(), chunkKeys.size());
 
-        // Фаза 1: запускаем батчевую загрузку чанков
         CityBuildScheduler.scheduleChunkLoading(chunkKeys, () -> {
-            // Фаза 2: когда чанки загружены — строим
             LOGGER.info("Chunks ready, building city...");
 
             RoadNetwork network = new RoadNetwork();
-            List<Runnable> buildActions = new ArrayList<>();
+            List<Runnable> allActions = new ArrayList<>();
 
-            // Собираем действия для дорог
-            collectRoadActions(level, network, random, root, new HashSet<>(), buildActions);
+            collectRoadActions(level, network, random, root, new HashSet<>(), allActions);
+            int roadCount = allActions.size();
 
-            // Собираем действия для зданий и парков
-            buildActions.add(() -> {
-                BuildingGenerator.generateBuildings(level, network, nodeMap, straightPositions, random);
-            });
+            List<Runnable> buildingActions = BuildingGenerator.collectBuildActions(
+                    level, network, nodeMap, straightPositions, random
+            );
+            allActions.addAll(buildingActions);
 
-            // Запускаем батчевую постройку
-            CityBuildScheduler.scheduleBuildActions(buildActions);
+            LOGGER.info("Scheduled {} road actions + {} building actions = {} total",
+                    roadCount, buildingActions.size(), allActions.size());
 
-            LOGGER.info("Scheduled {} build actions", buildActions.size());
+            CityBuildScheduler.scheduleBuildActions(allActions);
         });
     }
 
@@ -98,22 +96,18 @@ public class RoadNetworkGenerator {
 
     private static Set<Long> collectChunkKeys(Set<BlockPos> nodePositions, Set<BlockPos> straightPositions) {
         Set<Long> chunkKeys = new HashSet<>();
-
         for (BlockPos pos : nodePositions) {
             addChunksForPos(pos, chunkKeys);
         }
-
         for (BlockPos pos : straightPositions) {
             addChunksForPos(pos, chunkKeys);
         }
-
         return chunkKeys;
     }
 
     private static void addChunksForPos(BlockPos pos, Set<Long> chunkKeys) {
         int baseChunkX = pos.getX() >> 4;
         int baseChunkZ = pos.getZ() >> 4;
-
         for (int dx = 0; dx < 4; dx++) {
             for (int dz = 0; dz < 4; dz++) {
                 int chunkX = baseChunkX + dx;

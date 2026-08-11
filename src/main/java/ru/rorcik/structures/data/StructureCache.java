@@ -14,41 +14,26 @@ import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.generation.GeneratorConfig;
 
 import java.io.InputStream;
-import java.lang.ref.SoftReference;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class StructureCache {
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    /**
-     * Максимальное количество скомпилированных шаблонов в памяти одновременно.
-     * Остальные будут перекомпилированы из сырых данных при необходимости.
-     */
-    private static final int MAX_COMPILED_CACHE_SIZE = 64;
-
-    /**
-     * Сырые NBT — хранятся всегда, они компактные (~1-50KB каждый).
-     * Скомпилированные шаблоны — тяжёлые (~1-20MB каждый), кэшируются лениво.
-     */
     private static Map<ResourceLocation, byte[]> COMPRESSED_RAW_CACHE = Collections.emptyMap();
     private static HolderGetter<Block> blockGetter = null;
 
-    /**
-     * LRU кэш скомпилированных шаблонов.
-     * Когда превышает MAX_COMPILED_CACHE_SIZE, самые старые удаляются.
-     */
     private static final Map<ResourceLocation, StructureTemplate> COMPILED_LRU = Collections.synchronizedMap(
-            new LinkedHashMap<>(MAX_COMPILED_CACHE_SIZE, 0.75f, true) {
+            new LinkedHashMap<>(GeneratorConfig.MAX_TEMPLATE_CACHE, 0.75f, true) {
                 @Override
                 protected boolean removeEldestEntry(Map.Entry<ResourceLocation, StructureTemplate> eldest) {
-                    boolean shouldRemove = size() > MAX_COMPILED_CACHE_SIZE;
+                    boolean shouldRemove = size() > GeneratorConfig.MAX_TEMPLATE_CACHE;
                     if (shouldRemove) {
                         LOGGER.debug("Evicting compiled template from cache: {}", eldest.getKey());
                     }
@@ -57,10 +42,6 @@ public class StructureCache {
             }
     );
 
-    /**
-     * Загружает сырые NBT и сжимает их в byte[].
-     * Вызывается при загрузке ресурсов.
-     */
     public static void loadRawNbt(ResourceManager resourceManager) {
         Map<ResourceLocation, byte[]> tempCache = new HashMap<>();
 
@@ -97,29 +78,55 @@ public class StructureCache {
                 tempCache.values().stream().mapToLong(b -> b.length).sum() / 1024);
     }
 
-    /**
-     * Сохраняет ссылку на blockGetter для ленивой компиляции.
-     * Больше не компилирует ВСЕ шаблоны разом.
-     */
     public static void compileTemplates(HolderLookup.Provider registryAccess) {
         blockGetter = registryAccess.lookupOrThrow(Registries.BLOCK);
         COMPILED_LRU.clear();
-        LOGGER.info("StructureCache ready for lazy compilation ({} raw templates available)",
-                COMPRESSED_RAW_CACHE.size());
+
+        if (GeneratorConfig.PRECOMPILE_ALL_TEMPLATES) {
+            precompileAll();
+        } else {
+            LOGGER.info("StructureCache ready for lazy compilation ({} raw templates available)",
+                    COMPRESSED_RAW_CACHE.size());
+        }
     }
 
     /**
-     * Получает скомпилированный шаблон.
-     * Если его нет в LRU кэше — компилирует из сырых данных на лету.
+     * Предварительно компилирует ВСЕ шаблоны из raw cache.
+     * Это делает загрузку сервера медленнее, но первую генерацию города — быстрее.
      */
+    private static void precompileAll() {
+        if (blockGetter == null) {
+            LOGGER.error("Cannot precompile templates, blockGetter is null");
+            return;
+        }
+
+        long startTime = System.currentTimeMillis();
+        int compiled = 0;
+
+        for (ResourceLocation location : COMPRESSED_RAW_CACHE.keySet()) {
+            byte[] rawBytes = COMPRESSED_RAW_CACHE.get(location);
+            try {
+                CompoundTag nbt = NbtIo.readCompressed(new java.io.ByteArrayInputStream(rawBytes));
+                StructureTemplate template = new StructureTemplate();
+                template.load(blockGetter, nbt);
+                COMPILED_LRU.put(location, template);
+                compiled++;
+            } catch (Exception e) {
+                LOGGER.error("Failed to precompile template: {}", location, e);
+            }
+        }
+
+        long elapsed = System.currentTimeMillis() - startTime;
+        LOGGER.info("Precompiled {} templates in {} ms (cache size: {}/{})",
+                compiled, elapsed, COMPILED_LRU.size(), GeneratorConfig.MAX_TEMPLATE_CACHE);
+    }
+
     public static Optional<StructureTemplate> get(ResourceLocation location) {
-        // Сначала проверяем LRU кэш
         StructureTemplate cached = COMPILED_LRU.get(location);
         if (cached != null) {
             return Optional.of(cached);
         }
 
-        // Ленивая компиляция
         byte[] rawBytes = COMPRESSED_RAW_CACHE.get(location);
         if (rawBytes == null) {
             return Optional.empty();
@@ -142,10 +149,6 @@ public class StructureCache {
         }
     }
 
-    /**
-     * Предварительно компилирует указанные шаблоны.
-     * Полезно для критических структур (дороги, которые точно понадобятся).
-     */
     public static void precompile(ResourceLocation... locations) {
         for (ResourceLocation loc : locations) {
             get(loc);
