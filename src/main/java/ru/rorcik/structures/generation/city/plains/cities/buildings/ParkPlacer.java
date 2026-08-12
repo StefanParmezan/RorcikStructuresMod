@@ -1,3 +1,4 @@
+// FILE: ./main/java/ru/rorcik/structures/generation/city/plains/cities/buildings/ParkPlacer.java
 package ru.rorcik.structures.generation.city.plains.cities.buildings;
 
 import net.minecraft.core.BlockPos;
@@ -12,6 +13,7 @@ import ru.rorcik.structures.common.ModPaths;
 import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.city.plains.config_loaders.ParkConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.ParkConfig;
+import ru.rorcik.structures.generation.GeneratorConfig;
 import ru.rorcik.structures.generation.StructureUtils;
 
 import java.util.ArrayList;
@@ -46,21 +48,18 @@ public class ParkPlacer {
 
     public static Set<BlockPos> calculateSlots(BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
         Set<BlockPos> slots = new HashSet<>();
-
         int[] baseSize = getParkBaseSize(park);
         boolean rotated90 = isRotated90(rotation);
 
         int worldSizeX = rotated90 ? baseSize[1] : baseSize[0];
         int worldSizeZ = rotated90 ? baseSize[0] : baseSize[1];
 
-        int slotsAlongX = Math.max(1, (worldSizeX + ru.rorcik.structures.generation.GeneratorConfig.ROAD_STEP - 1) / ru.rorcik.structures.generation.GeneratorConfig.ROAD_STEP);
-        int slotsAlongZ = Math.max(1, (worldSizeZ + ru.rorcik.structures.generation.GeneratorConfig.ROAD_STEP - 1) / ru.rorcik.structures.generation.GeneratorConfig.ROAD_STEP);
+        int slotsAlongX = Math.max(1, (worldSizeX + GeneratorConfig.ROAD_STEP - 1) / GeneratorConfig.ROAD_STEP);
+        int slotsAlongZ = Math.max(1, (worldSizeZ + GeneratorConfig.ROAD_STEP - 1) / GeneratorConfig.ROAD_STEP);
 
         Direction depthDir = side;
         Direction widthDir = side.getClockWise();
-
-        int depthSlots;
-        int widthSlots;
+        int depthSlots, widthSlots;
 
         if (depthDir == Direction.NORTH || depthDir == Direction.SOUTH) {
             depthSlots = slotsAlongZ;
@@ -70,51 +69,37 @@ public class ParkPlacer {
             widthSlots = slotsAlongZ;
         }
 
-        BlockPos start = roadPos.relative(depthDir, ru.rorcik.structures.generation.GeneratorConfig.BUILDING_DISTANCE);
+        BlockPos.MutableBlockPos mutPos = new BlockPos.MutableBlockPos();
+        mutPos.set(roadPos).move(depthDir, GeneratorConfig.BUILDING_DISTANCE);
+        BlockPos start = mutPos.immutable();
 
         for (int d = 0; d < depthSlots; d++) {
             for (int w = 0; w < widthSlots; w++) {
-                BlockPos slot = start
-                        .relative(depthDir, d * ru.rorcik.structures.generation.GeneratorConfig.ROAD_STEP)
-                        .relative(widthDir, w * ru.rorcik.structures.generation.GeneratorConfig.ROAD_STEP);
-                slots.add(slot);
+                mutPos.set(start)
+                        .move(depthDir, d * GeneratorConfig.ROAD_STEP)
+                        .move(widthDir, w * GeneratorConfig.ROAD_STEP);
+                slots.add(mutPos.immutable());
             }
         }
-
         return slots;
     }
 
     public static void placePark(ServerLevel level, BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
         BlockPos placementPos = calculatePlacementOrigin(roadPos, side, park, rotation);
-
         StructureUtils.placeStructureUsingOriginPivot(
-                level,
-                placementPos,
-                ModPaths.parkNbtPath(park.name()),
-                rotation,
-                false,
-                false
+                level, placementPos, ModPaths.parkNbtPath(park.name()), rotation, false, false
         );
     }
 
     private static BlockPos calculatePlacementOrigin(BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
         Set<BlockPos> slots = calculateSlots(roadPos, side, park, rotation);
         BlockPos minCorner = calculateMinCorner(slots, roadPos.getY() + park.yOffset());
-
         int[] baseSize = getParkBaseSize(park);
-
-        return StructureUtils.getCompensatedOrigin(
-                minCorner,
-                rotation,
-                baseSize[0],
-                baseSize[1]
-        );
+        return StructureUtils.getCompensatedOrigin(minCorner, rotation, baseSize[0], baseSize[1]);
     }
 
     public static List<ParkConfig> filterParks(List<ParkConfig> allParks) {
-        if (!ru.rorcik.structures.generation.GeneratorConfig.PARK_ONLY_RECT) {
-            return allParks;
-        }
+        if (!GeneratorConfig.PARK_ONLY_RECT) return allParks;
 
         List<ParkConfig> rectParks = new ArrayList<>();
         for (ParkConfig park : allParks) {
@@ -133,12 +118,10 @@ public class ParkPlacer {
     private static BlockPos calculateMinCorner(Set<BlockPos> slots, int y) {
         int minX = Integer.MAX_VALUE;
         int minZ = Integer.MAX_VALUE;
-
         for (BlockPos s : slots) {
             minX = Math.min(minX, s.getX());
             minZ = Math.min(minZ, s.getZ());
         }
-
         return new BlockPos(minX, y, minZ);
     }
 
@@ -151,7 +134,6 @@ public class ParkPlacer {
                 return new int[]{size.getX(), size.getZ()};
             }
         }
-
         return new int[]{park.size()[0], park.size()[2]};
     }
 
@@ -163,14 +145,12 @@ public class ParkPlacer {
         }
 
         Direction side = calculateSideForRotation(rotation);
-        BlockPos roadPos = playerPos.relative(side.getOpposite(), ru.rorcik.structures.generation.GeneratorConfig.BUILDING_DISTANCE);
-
+        BlockPos roadPos = playerPos.relative(side.getOpposite(), GeneratorConfig.BUILDING_DISTANCE);
         Set<BlockPos> slots = calculateSlots(roadPos, side, park, rotation);
 
         LOGGER.info("[PARK-TEST] Park: {} | Rotation: {} | Side: {}", parkName, rotation, side);
         LOGGER.info("[PARK-TEST] PlayerPos: {}", playerPos.toShortString());
         LOGGER.info("[PARK-TEST] Virtual roadPos: {}", roadPos.toShortString());
-
         for (BlockPos s : slots) {
             LOGGER.info("[PARK-TEST]   Slot: {}", s.toShortString());
         }

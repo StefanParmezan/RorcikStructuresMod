@@ -1,3 +1,4 @@
+// FILE: ./main/java/ru/rorcik/structures/generation/city/plains/cities/roads/RoadNetworkGenerator.java
 package ru.rorcik.structures.generation.city.plains.cities.roads;
 
 import com.mojang.logging.LogUtils;
@@ -19,26 +20,24 @@ import java.util.*;
 public class RoadNetworkGenerator {
     private static final Logger LOGGER = LogUtils.getLogger();
 
+    // 64 (дом) + 64 (отступ) = 128 блоков = 8 чанков
+    private static final int CHUNK_LOAD_RADIUS = 8;
+
     public static void generateRoadNetwork(ServerLevel level, BlockPos origin, long seed, int maxSegments) {
         long uniqueSeed = seed ^ origin.hashCode() ^ System.nanoTime() ^ level.getRandom().nextLong();
         RandomSource random = RandomSource.create(uniqueSeed);
-
         Map<BlockPos, RoadNode> nodeMap = new HashMap<>();
         Set<BlockPos> straightPositions = new HashSet<>();
-
         RoadNode root = RoadGraphBuilder.buildGraph(random, origin, Direction.SOUTH, 0, nodeMap, straightPositions);
 
         Set<Long> chunkKeys = collectChunkKeys(nodeMap.keySet(), straightPositions);
-
         LOGGER.info("Graph built: {} nodes, {} straights, {} chunks needed",
                 nodeMap.size(), straightPositions.size(), chunkKeys.size());
 
         CityBuildScheduler.scheduleChunkLoading(chunkKeys, () -> {
             LOGGER.info("Chunks ready, building city...");
-
             RoadNetwork network = new RoadNetwork();
             List<Runnable> allActions = new ArrayList<>();
-
             collectRoadActions(level, network, random, root, new HashSet<>(), allActions);
             int roadCount = allActions.size();
 
@@ -49,7 +48,6 @@ public class RoadNetworkGenerator {
 
             LOGGER.info("Scheduled {} road actions + {} building actions = {} total",
                     roadCount, buildingActions.size(), allActions.size());
-
             CityBuildScheduler.scheduleBuildActions(allActions);
         });
     }
@@ -66,7 +64,6 @@ public class RoadNetworkGenerator {
         placed.add(node.position());
 
         List<Direction> connections = node.getAllConnections();
-
         if (!connections.isEmpty()) {
             RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
             if (entry != null) {
@@ -89,7 +86,6 @@ public class RoadNetworkGenerator {
                 }
                 currentPos = RoadNetwork.getNextPosition(currentPos, exitDir, GeneratorConfig.ROAD_STEP);
             }
-
             collectRoadActions(level, network, random, child, placed, actions);
         }
     }
@@ -97,22 +93,20 @@ public class RoadNetworkGenerator {
     private static Set<Long> collectChunkKeys(Set<BlockPos> nodePositions, Set<BlockPos> straightPositions) {
         Set<Long> chunkKeys = new HashSet<>();
         for (BlockPos pos : nodePositions) {
-            addChunksForPos(pos, chunkKeys);
+            addChunksInRadius(pos, CHUNK_LOAD_RADIUS, chunkKeys);
         }
         for (BlockPos pos : straightPositions) {
-            addChunksForPos(pos, chunkKeys);
+            addChunksInRadius(pos, CHUNK_LOAD_RADIUS, chunkKeys);
         }
         return chunkKeys;
     }
 
-    private static void addChunksForPos(BlockPos pos, Set<Long> chunkKeys) {
+    private static void addChunksInRadius(BlockPos pos, int radiusChunks, Set<Long> chunkKeys) {
         int baseChunkX = pos.getX() >> 4;
         int baseChunkZ = pos.getZ() >> 4;
-        for (int dx = 0; dx < 4; dx++) {
-            for (int dz = 0; dz < 4; dz++) {
-                int chunkX = baseChunkX + dx;
-                int chunkZ = baseChunkZ + dz;
-                long key = ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
+        for (int dx = -radiusChunks; dx <= radiusChunks; dx++) {
+            for (int dz = -radiusChunks; dz <= radiusChunks; dz++) {
+                long key = ((long) (baseChunkX + dx) << 32) | ((baseChunkZ + dz) & 0xFFFFFFFFL);
                 chunkKeys.add(key);
             }
         }

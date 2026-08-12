@@ -1,18 +1,26 @@
+// FILE: ./main/java/ru/rorcik/structures/generation/city/plains/cities/buildings/BuildingPlacer.java
 package ru.rorcik.structures.generation.city.plains.cities.buildings;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import ru.rorcik.structures.common.ModPaths;
 import ru.rorcik.structures.data.StructureCache;
+import ru.rorcik.structures.data.city.plains.config_loaders.HouseConfigLoader;
 import ru.rorcik.structures.data.city.plains.config_loaders.ParkConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.BuildingSlot;
+import ru.rorcik.structures.data.city.plains.containers.HouseConfig;
 import ru.rorcik.structures.data.city.plains.containers.ParkConfig;
+import ru.rorcik.structures.data.city.plains.containers.RoomSlot;
 import ru.rorcik.structures.generation.GeneratorConfig;
 import ru.rorcik.structures.generation.StructureUtils;
 import ru.rorcik.structures.generation.city.plains.houses.HouseGenerator;
+import ru.rorcik.structures.generation.city.plains.houses.HousePositionCalculator;
+import ru.rorcik.structures.generation.city.plains.houses.RoomPlacer;
 
 import java.util.Optional;
 
@@ -34,23 +42,57 @@ public class BuildingPlacer {
         }
     }
 
+    /**
+     * Ставит только оболочку дома (без комнат).
+     * Вызывается как отдельное действие в планировщике.
+     */
+    public static void placeHouseShell(ServerLevel level, BuildingSlot slot) {
+        String houseType = slot.buildingName().toLowerCase();
+        HouseConfig config = HouseConfigLoader.getConfig(houseType);
+        if (config == null) return;
+
+        long uniqueSeed = level.getSeed() ^ slot.position().hashCode() ^ level.getRandom().nextLong();
+        RandomSource random = RandomSource.create(uniqueSeed);
+
+        int houseDecor = config.houseDecorCount() > 0 ? random.nextInt(config.houseDecorCount()) : 0;
+        String houseNbt = houseType + "_" + houseDecor;
+
+        BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(slot.position(), config);
+        BlockPos housePlacementOrigin = HousePositionCalculator.calculatePlacementOrigin(
+                houseOrigin, slot.rotation(), config.size()[0], config.size()[2]
+        );
+        StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseNbt), slot.rotation(), false, false);
+    }
+
+    /**
+     * Ставит одну конкретную комнату дома.
+     * Вызывается как отдельное действие в планировщике.
+     */
+    public static void placeHouseRoom(ServerLevel level, BuildingSlot slot, RoomSlot room, int floorIndex) {
+        String houseType = slot.buildingName().toLowerCase();
+        HouseConfig config = HouseConfigLoader.getConfig(houseType);
+        if (config == null) return;
+
+        long uniqueSeed = level.getSeed() ^ slot.position().hashCode() ^ floorIndex ^ level.getRandom().nextLong();
+        RandomSource random = RandomSource.create(uniqueSeed);
+
+        BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(slot.position(), config);
+        RoomPlacer.placeSingleRoom(level, config, room, houseOrigin, slot.rotation(), random, floorIndex);
+    }
+
     private static void placePark(ServerLevel level, BuildingSlot slot) {
         ParkConfig park = ParkConfigLoader.getPark(slot.buildingName());
-        if (park == null) {
-            return;
-        }
+        if (park == null) return;
 
         BlockPos buildingPos = slot.position();
         Direction side = slot.roadSide();
         BlockPos roadPos = buildingPos.relative(side.getOpposite(), GeneratorConfig.BUILDING_DISTANCE);
-
         ParkPlacer.placePark(level, roadPos, side, park, slot.rotation());
     }
 
     private static void placeSimpleBuilding(ServerLevel level, BuildingSlot slot) {
         String nbtPath = ModPaths.buildingNbtPath(slot.category(), slot.buildingName());
         ResourceLocation location = ResourceLocation.tryParse(nbtPath);
-
         if (location == null) return;
 
         Optional<StructureTemplate> templateOpt = StructureCache.get(location);
@@ -58,29 +100,16 @@ public class BuildingPlacer {
 
         StructureTemplate template = templateOpt.get();
         BlockPos size = new BlockPos(template.getSize());
-
         BlockPos origin = slot.position().offset(0, BUILDING_Y_OFFSET, 0);
         BlockPos compensated = StructureUtils.getCompensatedOrigin(
-                origin,
-                slot.rotation(),
-                size.getX(),
-                size.getZ()
+                origin, slot.rotation(), size.getX(), size.getZ()
         );
-
-        StructureUtils.placeStructure(
-                level,
-                compensated,
-                nbtPath,
-                slot.rotation(),
-                false,
-                false
-        );
+        StructureUtils.placeStructure(level, compensated, nbtPath, slot.rotation(), false, false);
     }
 
     private static void placePlatform(ServerLevel level, BuildingSlot slot) {
         String nbtPath = ModPaths.platformNbtPath(slot.buildingName());
         ResourceLocation location = ResourceLocation.tryParse(nbtPath);
-
         if (location == null) return;
 
         Optional<StructureTemplate> templateOpt = StructureCache.get(location);
@@ -88,22 +117,10 @@ public class BuildingPlacer {
 
         StructureTemplate template = templateOpt.get();
         BlockPos size = new BlockPos(template.getSize());
-
         BlockPos origin = slot.position().offset(0, BUILDING_Y_OFFSET, 0);
         BlockPos compensated = StructureUtils.getCompensatedOrigin(
-                origin,
-                slot.rotation(),
-                size.getX(),
-                size.getZ()
+                origin, slot.rotation(), size.getX(), size.getZ()
         );
-
-        StructureUtils.placeStructure(
-                level,
-                compensated,
-                nbtPath,
-                slot.rotation(),
-                false,
-                false
-        );
+        StructureUtils.placeStructure(level, compensated, nbtPath, slot.rotation(), false, false);
     }
 }

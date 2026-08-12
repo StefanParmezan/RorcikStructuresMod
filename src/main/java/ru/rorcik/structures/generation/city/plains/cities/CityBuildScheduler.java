@@ -1,3 +1,4 @@
+// FILE: ./main/java/ru/rorcik/structures/generation/city/plains/cities/CityBuildScheduler.java
 package ru.rorcik.structures.generation.city.plains.cities;
 
 import net.minecraft.server.level.ServerLevel;
@@ -37,9 +38,12 @@ public class CityBuildScheduler {
     private static int adaptiveStructuresPerTick = GeneratorConfig.INITIAL_STRUCTURES_PER_TICK;
     private static long totalBuildTimeMs = 0;
     private static int adaptiveTickCount = 0;
-
     private static int warmupTicks = 0;
     private static final int WARMUP_TICKS = 15;
+
+    // Троттлинг логирования: не чаще раза в секунду
+    private static long lastLogTimeMs = 0;
+    private static final long LOG_INTERVAL_MS = 1000;
 
     public record ChunkLoadTask(int chunkX, int chunkZ) {}
     public record BuildTask(Runnable action) {}
@@ -56,17 +60,16 @@ public class CityBuildScheduler {
 
         onChunksReady = whenReady;
         active = true;
-
         totalChunks = chunkKeys.size();
         loadedChunks = 0;
         chunkLoadStartTime = System.currentTimeMillis();
+        lastLogTimeMs = System.currentTimeMillis();
 
         adaptiveStructuresPerTick = GeneratorConfig.INITIAL_STRUCTURES_PER_TICK;
         totalBuildTimeMs = 0;
         adaptiveTickCount = 0;
-
-
         warmupTicks = 0;
+
         LOGGER.info("[SCHEDULER] Queued {} chunks for loading ({} per tick)",
                 totalChunks, GeneratorConfig.CHUNKS_PER_TICK);
     }
@@ -76,10 +79,10 @@ public class CityBuildScheduler {
         for (Runnable action : actions) {
             buildQueue.add(new BuildTask(action));
         }
-
         totalBuildActions = actions.size();
         completedBuildActions = 0;
         buildStartTime = System.currentTimeMillis();
+        lastLogTimeMs = System.currentTimeMillis();
 
         LOGGER.info("[SCHEDULER] Queued {} build actions (adaptive, starting at {} per tick)",
                 totalBuildActions, adaptiveStructuresPerTick);
@@ -92,7 +95,6 @@ public class CityBuildScheduler {
 
         var server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
         if (server == null) return;
-
         ServerLevel level = server.overworld();
         if (level == null) return;
 
@@ -119,7 +121,6 @@ public class CityBuildScheduler {
             }
 
             active = false;
-
             StructureCache.logStats();
 
             if (RorcikStructuresModConfig.unloadAfterGeneration) {
@@ -140,9 +141,14 @@ public class CityBuildScheduler {
             loadedChunks++;
         }
 
+        // Логирование: раз в секунду или при завершении
         if (processed > 0 && totalChunks > 0) {
-            int percent = (loadedChunks * 100) / totalChunks;
-            LOGGER.info("[SCHEDULER] Chunks: {}/{} ({}%)", loadedChunks, totalChunks, percent);
+            long now = System.currentTimeMillis();
+            if (now - lastLogTimeMs >= LOG_INTERVAL_MS || loadedChunks == totalChunks) {
+                int percent = (loadedChunks * 100) / totalChunks;
+                LOGGER.info("[SCHEDULER] Chunks: {}/{} ({}%)", loadedChunks, totalChunks, percent);
+                lastLogTimeMs = now;
+            }
         }
     }
 
@@ -172,9 +178,12 @@ public class CityBuildScheduler {
             adjustStructuresPerTick(elapsed);
         }
 
-        if (completedBuildActions % 50 == 0 || buildQueue.isEmpty()) {
+        // Логирование: каждые 50 структур, раз в секунду, или при завершении
+        long now = System.currentTimeMillis();
+        if (buildQueue.isEmpty() || completedBuildActions % 50 == 0 || (now - lastLogTimeMs >= LOG_INTERVAL_MS)) {
             LOGGER.info("[SCHEDULER] Build progress: {}/{} structures (rate: {}/tick, tick time: {} ms)",
                     completedBuildActions, totalBuildActions, adaptiveStructuresPerTick, elapsed);
+            lastLogTimeMs = now;
         }
     }
 
@@ -182,7 +191,6 @@ public class CityBuildScheduler {
         long target = GeneratorConfig.TARGET_TICK_TIME_MS;
         int min = GeneratorConfig.MIN_STRUCTURES_PER_TICK;
         int max = GeneratorConfig.MAX_STRUCTURES_PER_TICK;
-
         int previous = adaptiveStructuresPerTick;
 
         if (elapsedMs > target) {
@@ -197,13 +205,8 @@ public class CityBuildScheduler {
         }
     }
 
-    public static boolean isActive() {
-        return active;
-    }
-
-    public static int getCurrentStructuresPerTick() {
-        return adaptiveStructuresPerTick;
-    }
+    public static boolean isActive() { return active; }
+    public static int getCurrentStructuresPerTick() { return adaptiveStructuresPerTick; }
 
     public static void reset() {
         chunkQueue.clear();
@@ -217,5 +220,6 @@ public class CityBuildScheduler {
         adaptiveStructuresPerTick = GeneratorConfig.INITIAL_STRUCTURES_PER_TICK;
         totalBuildTimeMs = 0;
         adaptiveTickCount = 0;
+        lastLogTimeMs = 0;
     }
 }
