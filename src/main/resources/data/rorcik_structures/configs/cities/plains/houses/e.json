@@ -1,0 +1,129 @@
+{
+  "type": "e",
+  "offset": [1, 0, 1],
+  "size": [64, 64, 64],
+  "floorHeight": 4,
+  "firstFloorOffset": 1,
+  "rooms": [
+    {
+      "nbt": "e_living",
+      "position": [49, 2, 41],
+      "offset": [1, 1, 1],
+      "size": [4, 3, 10],
+      "rotation": 0,
+      "startFloor": 0,
+      "repeat": 4,
+      "variant": ""
+    },
+    {
+      "nbt": "e_living",
+      "position": [40, 2, 41],
+      "offset": [1, 1, 1],
+      "size": [4, 3, 10],
+      "rotation": 0,
+      "startFloor": 0,
+      "repeat": 5,
+      "variant": ""
+    },
+    {
+      "nbt": "e_living",
+      "position": [22, 2, 41],
+      "offset": [1, 1, 1],
+      "size": [4, 3, 10],
+      "rotation": 0,
+      "startFloor": 0,
+      "repeat": 5,
+      "variant": ""
+    },
+    {
+      "nbt": "e_living",
+      "position": [13, 2, 41],
+      "offset": [1, 1, 1],
+      "size": [4, 3, 10],
+      "rotation": 0,
+      "startFloor": 0,
+      "repeat": 4,
+      "variant": ""
+    },
+    {
+      "nbt": "e_bathroom",
+      "position": [45, 2, 41],
+      "offset": [1, 1, 1],
+      "size": [3, 3, 3],
+      "rotation": 0,
+      "startFloor": 0,
+      "repeat": 4,
+      "variant": ""
+    },
+    {
+      "nbt": "e_bathroom",
+      "position": [36, 2, 41],
+      "offset": [1, 1, 1],
+      "size": [3, 3, 3],
+      "rotation": 0,
+      "startFloor": 0,
+      "repeat": 5,
+      "variant": ""
+    },
+    {
+      "nbt": "e_bathroom",
+      "position": [18, 2, 41],
+      "offset": [1, 1, 1],
+      "size": [3, 3, 3],
+      "rotation": 0,
+      "startFloor": 0,
+      "repeat": 5,
+      "variant": ""
+    },
+    {
+      "nbt": "e_bathroom",
+      "position": [9, 2, 41],
+      "offset": [1, 1, 1],
+      "size": [3, 3, 3],
+      "rotation": 0,
+      "startFloor": 0,
+      "repeat": 4,
+      "variant": ""
+    },
+    {
+      "nbt": "e_bedroom",
+      "position": [45, 2, 45],
+      "offset": [1, 1, 1],
+      "size": [3, 3, 6],
+      "rotation": 0,
+      "startFloor": 0,
+      "repeat": 4,
+      "variant": ""
+    },
+    {
+      "nbt": "e_bedroom",
+      "position": [36, 2, 45],
+      "offset": [1, 1, 1],
+      "size": [3, 3, 6],
+      "rotation": 0,
+      "startFloor": 0,
+      "repeat": 5,
+      "variant": ""
+    },
+    {
+      "nbt": "e_bedroom",
+      "position": [18, 2, 45],
+      "offset": [1, 1, 1],
+      "size": [3, 3, 6],
+      "rotation": 0,
+      "startFloor": 0,
+      "repeat": 5,
+      "variant": ""
+    },
+    {
+      "nbt": "e_bedroom",
+      "position": [9, 2, 45],
+      "offset": [1, 1, 1],
+      "size": [3, 3, 6],
+      "rotation": 0,
+      "startFloor": 0,
+      "repeat": 4,
+      "variant": ""
+    }
+  ]
+}

@@ -210,8 +210,12 @@ public class BuildingSlotAllocator {
 
             Rotation nextRotation = calculateOutwardRotation(roadSide);
             String category = chooseCategory(random);
-            String buildingName = chooseBuilding(random, category);
 
+            if (category.equals(PARKS_CATEGORY)) {
+                category = "houses";
+            }
+
+            String buildingName = chooseBuilding(random, category);
             if (buildingName == null) continue;
 
             BuildingSlot nextSlot = new BuildingSlot(
@@ -389,68 +393,19 @@ public class BuildingSlotAllocator {
         if (occupiedSlots.containsKey(buildingPos)) return;
 
         if (roadPositions.contains(buildingPos)) {
-            LOGGER.debug("[SLOT] Skipped building at {} — road conflict", buildingPos.toShortString());
             return;
         }
 
         String category = chooseCategory(random);
 
         if (category.equals(PARKS_CATEGORY) && GeneratorConfig.SPAWN_PARKS) {
-            List<ParkConfig> parks = ParkConfigLoader.getParks();
-            List<ParkConfig> availableParks = ParkPlacer.filterParks(parks);
-
-            if (!availableParks.isEmpty()) {
-                ParkConfig park = availableParks.get(random.nextInt(availableParks.size()));
-                boolean isSquare = park.size()[0] == park.size()[2];
-                Rotation rotation = ParkPlacer.calculateRotationForSide(side);
-
-                Set<BlockPos> parkSlots = ParkPlacer.calculateSlots(nodePos, side, park, rotation);
-
-                LOGGER.info("[PARK-ALLOC] Selected '{}' | Type: {} | Side: {} | Slots needed: {}",
-                        park.name(), isSquare ? "SQUARE" : "RECT", side, parkSlots.size());
-
-                boolean canPlace = true;
-                int conflicts = 0;
-                for (BlockPos slot : parkSlots) {
-                    if (occupiedSlots.containsKey(slot) || roadPositions.contains(slot)) {
-                        canPlace = false;
-                        conflicts++;
-                    }
-                }
-
-                if (canPlace) {
-                    BuildingSlot parkSlot = new BuildingSlot(
-                            buildingPos,
-                            rotation,
-                            side,
-                            PARKS_CATEGORY,
-                            park.name(),
-                            0
-                    );
-
-                    slots.add(parkSlot);
-                    for (BlockPos slot : parkSlots) {
-                        occupiedSlots.put(slot, parkSlot);
-                    }
-
-                    LOGGER.info("[PARK-ALLOC] ✓ Placed '{}' ({}) at {} side {} ({} slots)",
-                            park.name(), isSquare ? "SQUARE" : "RECT",
-                            nodePos.toShortString(), side, parkSlots.size());
-                    return;
-                }
-
-                LOGGER.info("[PARK-ALLOC] ✗ '{}' ({}) conflicts at {} side {} ({} conflicts), falling back to building",
-                        park.name(), isSquare ? "SQUARE" : "RECT",
-                        nodePos.toShortString(), side, conflicts);
-            } else {
-                LOGGER.warn("[PARK-ALLOC] No parks available after filtering!");
+            if (tryAllocatePark(nodePos, side, buildingPos, occupiedSlots, slots, random, roadPositions)) {
+                return;
             }
-
             category = "houses";
         }
 
         String buildingName = chooseBuilding(random, category);
-
         if (buildingName == null) {
             LOGGER.warn("No building found for category: {}", category);
             return;
@@ -472,6 +427,71 @@ public class BuildingSlotAllocator {
 
         slots.add(slot);
         occupiedSlots.put(buildingPos, slot);
+    }
+
+    private static boolean tryAllocatePark(
+            BlockPos nodePos,
+            Direction side,
+            BlockPos buildingPos,
+            Map<BlockPos, BuildingSlot> occupiedSlots,
+            List<BuildingSlot> slots,
+            RandomSource random,
+            Set<BlockPos> roadPositions
+    ) {
+        List<ParkConfig> parks = ParkConfigLoader.getParks();
+        List<ParkConfig> availableParks = ParkPlacer.filterParks(parks);
+
+        if (availableParks.isEmpty()) {
+            return false;
+        }
+
+        int maxAttempts = 3;
+
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            ParkConfig park = availableParks.get(random.nextInt(availableParks.size()));
+            boolean isSquare = park.size()[0] == park.size()[2];
+            Rotation rotation = ParkPlacer.calculateRotationForSide(side);
+
+            Set<BlockPos> parkSlots = ParkPlacer.calculateSlots(nodePos, side, park, rotation);
+
+            boolean canPlace = true;
+            int conflicts = 0;
+            for (BlockPos slot : parkSlots) {
+                if (occupiedSlots.containsKey(slot) || roadPositions.contains(slot)) {
+                    canPlace = false;
+                    conflicts++;
+                }
+            }
+
+            if (canPlace) {
+                BuildingSlot parkSlot = new BuildingSlot(
+                        buildingPos,
+                        rotation,
+                        side,
+                        PARKS_CATEGORY,
+                        park.name(),
+                        0
+                );
+
+                slots.add(parkSlot);
+                for (BlockPos slot : parkSlots) {
+                    occupiedSlots.put(slot, parkSlot);
+                }
+
+                LOGGER.info("[PARK-ALLOC] Placed '{}' ({}) at {} side {} ({} slots, attempt {})",
+                        park.name(), isSquare ? "SQUARE" : "RECT",
+                        nodePos.toShortString(), side, parkSlots.size(), attempt + 1);
+                return true;
+            }
+
+            LOGGER.debug("[PARK-ALLOC] Attempt {}: '{}' ({}) conflicts at {} side {} ({} conflicts)",
+                    attempt + 1, park.name(), isSquare ? "SQUARE" : "RECT",
+                    nodePos.toShortString(), side, conflicts);
+        }
+
+        LOGGER.info("[PARK-ALLOC] All {} attempts failed at {} side {}, falling back to building",
+                maxAttempts, nodePos.toShortString(), side);
+        return false;
     }
 
     private static String chooseCategory(RandomSource random) {

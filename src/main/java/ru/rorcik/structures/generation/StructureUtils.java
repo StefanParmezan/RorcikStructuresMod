@@ -71,13 +71,13 @@ public final class StructureUtils {
     ) {
         ResourceLocation location = ResourceLocation.tryParse(nbtPath);
         if (location == null) {
-            LOGGER.error("Invalid resource location: {}", nbtPath);
+            LOGGER.error("[PLACE] Invalid resource location: {}", nbtPath);
             return;
         }
 
         Optional<StructureTemplate> templateOpt = StructureCache.get(location);
         if (templateOpt.isEmpty()) {
-            LOGGER.error("Structure not found in cache: {}", nbtPath);
+            LOGGER.error("[PLACE] Structure not available: {} — placement skipped", nbtPath);
             return;
         }
 
