@@ -4,11 +4,14 @@ package ru.rorcik.structures.generation.city.plains.cities.roads;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Rotation;
 import org.slf4j.Logger;
+import ru.rorcik.structures.common.ModPaths;
 import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
+import ru.rorcik.structures.data.city.plains.containers.RoadConfig;
 import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 import ru.rorcik.structures.data.city.plains.containers.RoadNode;
 import ru.rorcik.structures.generation.GeneratorConfig;
@@ -19,8 +22,6 @@ import java.util.*;
 
 public class RoadNetworkGenerator {
     private static final Logger LOGGER = LogUtils.getLogger();
-
-    // 64 (дом) + 64 (отступ) = 128 блоков = 8 чанков
     private static final int CHUNK_LOAD_RADIUS = 8;
 
     public static void generateRoadNetwork(ServerLevel level, BlockPos origin, long seed, int maxSegments) {
@@ -33,6 +34,10 @@ public class RoadNetworkGenerator {
         Set<Long> chunkKeys = collectChunkKeys(nodeMap.keySet(), straightPositions);
         LOGGER.info("Graph built: {} nodes, {} straights, {} chunks needed",
                 nodeMap.size(), straightPositions.size(), chunkKeys.size());
+
+        // Собираем шаблоны дорог заранее (до аллокации зданий)
+        Set<ResourceLocation> roadTemplates = collectRoadTemplates(nodeMap);
+        CityBuildScheduler.queuePreload(roadTemplates);
 
         CityBuildScheduler.scheduleChunkLoading(chunkKeys, () -> {
             LOGGER.info("Chunks ready, building city...");
@@ -50,6 +55,40 @@ public class RoadNetworkGenerator {
                     roadCount, buildingActions.size(), allActions.size());
             CityBuildScheduler.scheduleBuildActions(allActions);
         });
+    }
+
+    /**
+     * Собирает шаблоны дорог на основе реального графа.
+     */
+    private static Set<ResourceLocation> collectRoadTemplates(Map<BlockPos, RoadNode> nodeMap) {
+        Set<ResourceLocation> templates = new HashSet<>();
+        Set<String> usedRoadTypes = new HashSet<>();
+
+        for (RoadNode node : nodeMap.values()) {
+            List<Direction> connections = node.getAllConnections();
+            if (!connections.isEmpty()) {
+                RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
+                if (entry != null) {
+                    usedRoadTypes.add(entry.type());
+                }
+            }
+        }
+        usedRoadTypes.add("s");
+
+        for (String roadType : usedRoadTypes) {
+            RoadConfig config = RoadConfigLoader.getConfig(roadType);
+            if (config != null) {
+                for (int decor = 0; decor < Math.max(1, config.decorCount()); decor++) {
+                    ResourceLocation loc = ResourceLocation.tryParse(
+                            ModPaths.roadNbtPath(config.type(), config.type() + "_" + decor)
+                    );
+                    if (loc != null) templates.add(loc);
+                }
+            }
+        }
+
+        LOGGER.info("[ROAD-PRELOAD] Collected {} road templates for types: {}", templates.size(), usedRoadTypes);
+        return templates;
     }
 
     private static void collectRoadActions(

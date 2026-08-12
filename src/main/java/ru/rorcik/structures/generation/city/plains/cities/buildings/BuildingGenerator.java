@@ -21,6 +21,7 @@ import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 import ru.rorcik.structures.data.city.plains.containers.RoadNode;
 import ru.rorcik.structures.data.city.plains.containers.RoomSlot;
 import ru.rorcik.structures.generation.StructureUtils;
+import ru.rorcik.structures.generation.city.plains.cities.CityBuildScheduler;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -62,12 +63,13 @@ public class BuildingGenerator implements IStructureGenerator {
         );
         LOGGER.info("[BUILD] Collected {} building slots for batched placement", slots.size());
 
+        // Собираем нужные шаблоны и ставим в очередь планировщика
+        // вместо синхронного preloadTemplates()
         Set<ResourceLocation> requiredTemplates = collectRequiredTemplates(slots, nodeMap);
         if (!requiredTemplates.isEmpty()) {
-            LOGGER.info("[BUILD] Preloading {} unique templates before placement", requiredTemplates.size());
-            long startTime = System.currentTimeMillis();
-            StructureCache.preloadTemplates(requiredTemplates);
-            LOGGER.info("[BUILD] Preload complete in {} ms", System.currentTimeMillis() - startTime);
+            LOGGER.info("[BUILD] Queuing {} building/room templates for interleaved preload",
+                    requiredTemplates.size());
+            CityBuildScheduler.queuePreload(requiredTemplates);
         }
 
         int parkCount = 0;
@@ -84,9 +86,8 @@ public class BuildingGenerator implements IStructureGenerator {
                 actions.add(() -> BuildingPlacer.placeBuilding(level, slot));
             } else if (slot.category().equals("houses")) {
                 buildingCount++;
-                // Оболочка дома — отдельное действие
                 actions.add(() -> BuildingPlacer.placeHouseShell(level, slot));
-                // Каждая комната — отдельное действие для адаптивного планировщика
+
                 HouseConfig config = HouseConfigLoader.getConfig(slot.buildingName().toLowerCase());
                 if (config != null) {
                     for (RoomSlot room : config.rooms()) {
@@ -113,17 +114,14 @@ public class BuildingGenerator implements IStructureGenerator {
     ) {
         Set<ResourceLocation> templates = new HashSet<>();
 
-        // Здания, дома, комнаты, парки, платформы
         for (BuildingSlot slot : slots) {
             if (slot.category().equals("houses")) {
                 String houseType = slot.buildingName().toLowerCase();
                 HouseConfig config = HouseConfigLoader.getConfig(houseType);
                 if (config != null) {
-                    // Все декоры оболочки дома
                     for (int decor = 0; decor < Math.max(1, config.houseDecorCount()); decor++) {
                         addTemplate(templates, ModPaths.houseNbtPath(houseType + "_" + decor));
                     }
-                    // Все декоры всех комнат
                     for (RoomSlot room : config.rooms()) {
                         for (int decor = 0; decor < Math.max(1, room.decorCount()); decor++) {
                             String roomNbt = room.variant().isEmpty()
@@ -142,7 +140,7 @@ public class BuildingGenerator implements IStructureGenerator {
             }
         }
 
-        // Дороги: только те типы, которые реально есть в графе
+        // Дороги: только реально используемые типы
         Set<String> usedRoadTypes = new HashSet<>();
         for (RoadNode node : nodeMap.values()) {
             List<Direction> connections = node.getAllConnections();
@@ -153,7 +151,7 @@ public class BuildingGenerator implements IStructureGenerator {
                 }
             }
         }
-        usedRoadTypes.add("s"); // прямые участки между нодами
+        usedRoadTypes.add("s");
 
         for (String roadType : usedRoadTypes) {
             RoadConfig config = RoadConfigLoader.getConfig(roadType);

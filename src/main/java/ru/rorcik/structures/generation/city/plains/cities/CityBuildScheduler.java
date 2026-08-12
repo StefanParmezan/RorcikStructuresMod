@@ -1,6 +1,7 @@
 // FILE: ./main/java/ru/rorcik/structures/generation/city/plains/cities/CityBuildScheduler.java
 package ru.rorcik.structures.generation.city.plains.cities;
 
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraftforge.event.TickEvent;
@@ -14,6 +15,7 @@ import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.generation.GeneratorConfig;
 
 import java.util.ArrayDeque;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.List;
 import java.util.Set;
@@ -24,6 +26,7 @@ public class CityBuildScheduler {
 
     private static final Deque<ChunkLoadTask> chunkQueue = new ArrayDeque<>();
     private static final Deque<BuildTask> buildQueue = new ArrayDeque<>();
+    private static final Deque<ResourceLocation> preloadQueue = new ArrayDeque<>();
     private static Runnable onChunksReady = null;
     private static boolean active = false;
 
@@ -41,9 +44,14 @@ public class CityBuildScheduler {
     private static int warmupTicks = 0;
     private static final int WARMUP_TICKS = 15;
 
-    // Троттлинг логирования: не чаще раза в секунду
+    // Скорость прелоада: 6/тик вместе с чанками, 15/тик когда чанки уже загружены
+    private static final int PRELOAD_PER_TICK_DURING_CHUNKS = 6;
+    private static final int PRELOAD_PER_TICK_BEFORE_BUILD = 15;
+
     private static long lastLogTimeMs = 0;
     private static final long LOG_INTERVAL_MS = 1000;
+    private static int preloadedCount = 0;
+    private static int totalPreload = 0;
 
     public record ChunkLoadTask(int chunkX, int chunkZ) {}
     public record BuildTask(Runnable action) {}
@@ -51,6 +59,7 @@ public class CityBuildScheduler {
     public static void scheduleChunkLoading(Set<Long> chunkKeys, Runnable whenReady) {
         chunkQueue.clear();
         buildQueue.clear();
+        // НЕ очищаем preloadQueue — шаблоны дорог уже могут быть в очереди!
 
         for (long key : chunkKeys) {
             int cx = (int) (key >> 32);
@@ -72,6 +81,15 @@ public class CityBuildScheduler {
 
         LOGGER.info("[SCHEDULER] Queued {} chunks for loading ({} per tick)",
                 totalChunks, GeneratorConfig.CHUNKS_PER_TICK);
+    }
+
+    public static void queuePreload(Collection<ResourceLocation> templates) {
+        preloadQueue.addAll(templates);
+        totalPreload += templates.size();
+        if (!templates.isEmpty()) {
+            LOGGER.info("[SCHEDULER] Queued {} templates for interleaved preloading (total in queue: {})",
+                    templates.size(), preloadQueue.size());
+        }
     }
 
     public static void scheduleBuildActions(List<Runnable> actions) {
@@ -98,34 +116,41 @@ public class CityBuildScheduler {
         ServerLevel level = server.overworld();
         if (level == null) return;
 
+        // ФАЗА 1: Загрузка чанков + фоновый прелоад дорог
         if (!chunkQueue.isEmpty()) {
             processChunkLoading(level);
-        } else if (onChunksReady != null) {
-            long elapsed = System.currentTimeMillis() - chunkLoadStartTime;
-            LOGGER.info("[SCHEDULER] All {} chunks loaded in {} ms, starting build phase",
-                    totalChunks, elapsed);
-            Runnable callback = onChunksReady;
-            onChunksReady = null;
-            callback.run();
-        } else if (!buildQueue.isEmpty()) {
+            processPreloadQueue(PRELOAD_PER_TICK_DURING_CHUNKS);
+        }
+        // ФАЗА 2: Чанки загружены, запускаем аллокацию слотов (если еще не запущена)
+        else if (onChunksReady != null) {
+            if (preloadQueue.isEmpty()) {
+                long elapsed = System.currentTimeMillis() - chunkLoadStartTime;
+                LOGGER.info("[SCHEDULER] All {} chunks loaded in {} ms, preloaded {} templates, starting allocation phase",
+                        totalChunks, elapsed, preloadedCount);
+                Runnable callback = onChunksReady;
+                onChunksReady = null;
+                callback.run(); // Здесь вызовется queuePreload для зданий
+            } else {
+                processPreloadQueue(PRELOAD_PER_TICK_DURING_CHUNKS);
+            }
+        }
+        // ФАЗА 3: Прелоад шаблонов зданий ПЕРЕД началом строительства (БЕЗ стройки!)
+        else if (!preloadQueue.isEmpty()) {
+            processPreloadQueue(PRELOAD_PER_TICK_BEFORE_BUILD);
+
+            long now = System.currentTimeMillis();
+            if (now - lastLogTimeMs >= LOG_INTERVAL_MS || preloadQueue.size() < PRELOAD_PER_TICK_BEFORE_BUILD) {
+                LOGGER.info("[SCHEDULER] Preloading building templates... {} remaining in queue", preloadQueue.size());
+                lastLogTimeMs = now;
+            }
+        }
+        // ФАЗА 4: Строительство (кэш уже полностью готов, промахов не будет)
+        else if (!buildQueue.isEmpty()) {
             processBuildActions();
-        } else {
-            long elapsed = System.currentTimeMillis() - buildStartTime;
-            LOGGER.info("[SCHEDULER] City generation complete: {} structures in {} ms ({} per second)",
-                    completedBuildActions, elapsed,
-                    elapsed > 0 ? (completedBuildActions * 1000L) / elapsed : 0);
-
-            if (adaptiveTickCount > 0) {
-                LOGGER.info("[SCHEDULER] Adaptive stats: {} ticks, final rate: {} structures/tick, avg time per tick: {} ms",
-                        adaptiveTickCount, adaptiveStructuresPerTick, totalBuildTimeMs / adaptiveTickCount);
-            }
-
-            active = false;
-            StructureCache.logStats();
-
-            if (RorcikStructuresModConfig.unloadAfterGeneration) {
-                StructureCache.unloadCompiledTemplates();
-            }
+        }
+        // ФАЗА 5: Завершение
+        else {
+            finishGeneration();
         }
     }
 
@@ -141,13 +166,24 @@ public class CityBuildScheduler {
             loadedChunks++;
         }
 
-        // Логирование: раз в секунду или при завершении
         if (processed > 0 && totalChunks > 0) {
             long now = System.currentTimeMillis();
             if (now - lastLogTimeMs >= LOG_INTERVAL_MS || loadedChunks == totalChunks) {
                 int percent = (loadedChunks * 100) / totalChunks;
                 LOGGER.info("[SCHEDULER] Chunks: {}/{} ({}%)", loadedChunks, totalChunks, percent);
                 lastLogTimeMs = now;
+            }
+        }
+    }
+
+    private static void processPreloadQueue(int perTick) {
+        int processed = 0;
+        while (!preloadQueue.isEmpty() && processed < perTick) {
+            ResourceLocation loc = preloadQueue.poll();
+            if (loc != null) {
+                StructureCache.get(loc);
+                preloadedCount++;
+                processed++;
             }
         }
     }
@@ -178,12 +214,30 @@ public class CityBuildScheduler {
             adjustStructuresPerTick(elapsed);
         }
 
-        // Логирование: каждые 50 структур, раз в секунду, или при завершении
         long now = System.currentTimeMillis();
         if (buildQueue.isEmpty() || completedBuildActions % 50 == 0 || (now - lastLogTimeMs >= LOG_INTERVAL_MS)) {
             LOGGER.info("[SCHEDULER] Build progress: {}/{} structures (rate: {}/tick, tick time: {} ms)",
                     completedBuildActions, totalBuildActions, adaptiveStructuresPerTick, elapsed);
             lastLogTimeMs = now;
+        }
+    }
+
+    private static void finishGeneration() {
+        long elapsed = System.currentTimeMillis() - buildStartTime;
+        LOGGER.info("[SCHEDULER] City generation complete: {} structures in {} ms ({} per second)",
+                completedBuildActions, elapsed,
+                elapsed > 0 ? (completedBuildActions * 1000L) / elapsed : 0);
+
+        if (adaptiveTickCount > 0) {
+            LOGGER.info("[SCHEDULER] Adaptive stats: {} ticks, final rate: {} structures/tick, avg time per tick: {} ms",
+                    adaptiveTickCount, adaptiveStructuresPerTick, totalBuildTimeMs / adaptiveTickCount);
+        }
+
+        active = false;
+        StructureCache.logStats();
+
+        if (RorcikStructuresModConfig.unloadAfterGeneration) {
+            StructureCache.unloadCompiledTemplates();
         }
     }
 
@@ -211,15 +265,19 @@ public class CityBuildScheduler {
     public static void reset() {
         chunkQueue.clear();
         buildQueue.clear();
+        preloadQueue.clear();
         onChunksReady = null;
         active = false;
         totalBuildActions = 0;
         completedBuildActions = 0;
         totalChunks = 0;
         loadedChunks = 0;
+        preloadedCount = 0;
+        totalPreload = 0;
         adaptiveStructuresPerTick = GeneratorConfig.INITIAL_STRUCTURES_PER_TICK;
         totalBuildTimeMs = 0;
         adaptiveTickCount = 0;
+        warmupTicks = 0;
         lastLogTimeMs = 0;
     }
 }
