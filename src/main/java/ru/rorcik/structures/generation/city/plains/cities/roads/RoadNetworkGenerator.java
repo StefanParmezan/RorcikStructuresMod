@@ -1,4 +1,3 @@
-// FILE: ./main/java/ru/rorcik/structures/generation/city/plains/cities/roads/RoadNetworkGenerator.java
 package ru.rorcik.structures.generation.city.plains.cities.roads;
 
 import com.mojang.logging.LogUtils;
@@ -35,7 +34,6 @@ public class RoadNetworkGenerator {
         LOGGER.info("Graph built: {} nodes, {} straights, {} chunks needed",
                 nodeMap.size(), straightPositions.size(), chunkKeys.size());
 
-        // Собираем шаблоны дорог заранее (до аллокации зданий)
         Set<ResourceLocation> roadTemplates = collectRoadTemplates(nodeMap);
         CityBuildScheduler.queuePreload(roadTemplates);
 
@@ -57,9 +55,6 @@ public class RoadNetworkGenerator {
         });
     }
 
-    /**
-     * Собирает шаблоны дорог на основе реального графа.
-     */
     private static Set<ResourceLocation> collectRoadTemplates(Map<BlockPos, RoadNode> nodeMap) {
         Set<ResourceLocation> templates = new HashSet<>();
         Set<String> usedRoadTypes = new HashSet<>();

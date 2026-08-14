@@ -1,4 +1,3 @@
-// FILE: ./main/java/ru/rorcik/structures/generation/city/plains/cities/buildings/BuildingPlacer.java
 package ru.rorcik.structures.generation.city.plains.cities.buildings;
 
 import net.minecraft.core.BlockPos;
@@ -42,10 +41,6 @@ public class BuildingPlacer {
         }
     }
 
-    /**
-     * Ставит только оболочку дома (без комнат).
-     * Вызывается как отдельное действие в планировщике.
-     */
     public static void placeHouseShell(ServerLevel level, BuildingSlot slot) {
         String houseType = slot.buildingName().toLowerCase();
         HouseConfig config = HouseConfigLoader.getConfig(houseType);
@@ -64,10 +59,6 @@ public class BuildingPlacer {
         StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseNbt), slot.rotation(), false, false);
     }
 
-    /**
-     * Ставит одну конкретную комнату дома.
-     * Вызывается как отдельное действие в планировщике.
-     */
     public static void placeHouseRoom(ServerLevel level, BuildingSlot slot, RoomSlot room, int floorIndex) {
         String houseType = slot.buildingName().toLowerCase();
         HouseConfig config = HouseConfigLoader.getConfig(houseType);

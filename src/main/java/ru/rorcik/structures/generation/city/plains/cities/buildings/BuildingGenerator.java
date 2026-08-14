@@ -1,4 +1,3 @@
-// FILE: ./main/java/ru/rorcik/structures/generation/city/plains/cities/buildings/BuildingGenerator.java
 package ru.rorcik.structures.generation.city.plains.cities.buildings;
 
 import net.minecraft.core.BlockPos;
@@ -63,8 +62,6 @@ public class BuildingGenerator implements IStructureGenerator {
         );
         LOGGER.info("[BUILD] Collected {} building slots for batched placement", slots.size());
 
-        // Собираем нужные шаблоны и ставим в очередь планировщика
-        // вместо синхронного preloadTemplates()
         Set<ResourceLocation> requiredTemplates = collectRequiredTemplates(slots, nodeMap);
         if (!requiredTemplates.isEmpty()) {
             LOGGER.info("[BUILD] Queuing {} building/room templates for interleaved preload",
@@ -140,7 +137,6 @@ public class BuildingGenerator implements IStructureGenerator {
             }
         }
 
-        // Дороги: только реально используемые типы
         Set<String> usedRoadTypes = new HashSet<>();
         for (RoadNode node : nodeMap.values()) {
             List<Direction> connections = node.getAllConnections();

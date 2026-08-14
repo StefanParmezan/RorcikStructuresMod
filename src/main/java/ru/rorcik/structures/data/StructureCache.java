@@ -1,4 +1,3 @@
-// FILE: ./main/java/ru/rorcik/structures/data/StructureCache.java
 package ru.rorcik.structures.data;
 
 import net.minecraft.core.HolderGetter;
@@ -26,7 +25,6 @@ public class StructureCache {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final String ROOMS_PATH_MARKER = "rooms/";
 
-    // Статический коэффициент вместо синхронного замера
     private static final double DECOMPRESSION_FACTOR = GeneratorConfig.DEFAULT_DECOMPRESSION_FACTOR;
 
     private static Map<ResourceLocation, byte[]> COMPRESSED_RAW_CACHE = Collections.emptyMap();
@@ -251,7 +249,6 @@ public class StructureCache {
             StructureTemplate template = new StructureTemplate();
             template.load(blockGetter, nbt);
             targetCache.put(location, template);
-            // measureDecompressionFactor УБРАН — больше не блокируем серверный поток
             return Optional.of(template);
         } catch (Exception e) {
             LOGGER.error("[CACHE] Failed to compile template on-demand: {}", location, e);

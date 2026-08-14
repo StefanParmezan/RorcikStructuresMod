@@ -1,5 +1,7 @@
 package ru.rorcik.structures.data.city.plains.containers;
 
+import java.util.Set;
+
 public record RoomSlot(
         String nbt,
         int[] position,
@@ -11,5 +13,6 @@ public record RoomSlot(
         String variant,
         boolean mirrorX,
         boolean mirrorZ,
-        int decorCount
+        int decorCount,
+        Set<Integer> baseDecors
 ) {}

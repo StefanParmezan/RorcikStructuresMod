@@ -1,4 +1,3 @@
-// FILE: ./main/java/ru/rorcik/structures/generation/city/plains/houses/RoomPlacer.java
 package ru.rorcik.structures.generation.city.plains.houses;
 
 import net.minecraft.core.BlockPos;
@@ -11,18 +10,15 @@ import ru.rorcik.structures.data.city.plains.containers.RoomSlot;
 import ru.rorcik.structures.generation.StructureUtils;
 
 public class RoomPlacer {
-
     public static void placeRooms(ServerLevel level, HouseConfig config, BlockPos houseOrigin, Rotation houseRotation, RandomSource random) {
         for (RoomSlot slot : config.rooms()) {
             for (int i = 0; i < slot.repeat(); i++) {
-                placeSingleRoom(level, config, slot, houseOrigin, houseRotation, random, i);
+                int floor = slot.startFloor() + i;
+                placeSingleRoom(level, config, slot, houseOrigin, houseRotation, random, floor);
             }
         }
     }
 
-    /**
-     * Ставит одну конкретную комнату. Используется гранулярным планировщиком.
-     */
     public static void placeSingleRoom(
             ServerLevel level,
             HouseConfig config,
@@ -42,19 +38,16 @@ public class RoomPlacer {
                 slot.position()[0], slot.position()[1], slot.position()[2],
                 houseRotation, houseSizeX, houseSizeZ
         );
+
         int[] rotatedRoomOffset = StructureUtils.rotateOffset(
                 slot.offset()[0], slot.offset()[1], slot.offset()[2],
                 houseRotation
         );
 
-        int floor = slot.startFloor() + floorIndex;
-        int y = config.firstFloorOffset() + (floor * config.floorHeight());
-        int decor = slot.decorCount() > 0 ? random.nextInt(slot.decorCount()) : 0;
-        String variant = slot.variant();
+        int y = config.firstFloorOffset() + (floorIndex * config.floorHeight());
 
-        String roomNbt = variant.isEmpty()
-                ? slot.nbt() + "_" + decor
-                : slot.nbt() + "_" + decor + "_" + variant;
+        int decor = slot.decorCount() > 0 ? random.nextInt(slot.decorCount()) : 0;
+        String roomNbt = resolveRoomNbt(slot, decor);
 
         BlockPos roomOrigin = houseOrigin.offset(
                 rotatedRoomPos[0] + rotatedRoomOffset[0],
@@ -62,9 +55,21 @@ public class RoomPlacer {
                 rotatedRoomPos[2] + rotatedRoomOffset[2]
         );
 
-        StructureUtils.placeStructure(
-                level, roomOrigin, ModPaths.roomNbtPath(config.type(), roomNbt),
-                roomRotation, slot.mirrorX(), slot.mirrorZ()
-        );
+        StructureUtils.placeStructure(level, roomOrigin, ModPaths.roomNbtPath(config.type(), roomNbt), roomRotation, slot.mirrorX(), slot.mirrorZ());
+    }
+
+    private static String resolveRoomNbt(RoomSlot slot, int decor) {
+        String baseName = slot.nbt();
+        String variant = slot.variant();
+
+        if (!variant.isEmpty()) {
+            return baseName + "_" + decor + "_" + variant;
+        }
+
+        if (slot.baseDecors().contains(decor)) {
+            return baseName + "_" + decor;
+        }
+
+        return baseName + "_" + decor + "_v";
     }
 }

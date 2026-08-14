@@ -1,4 +1,3 @@
-// FILE: ./main/java/ru/rorcik/structures/generation/city/plains/cities/buildings/ParkPlacer.java
 package ru.rorcik.structures.generation.city.plains.cities.buildings;
 
 import net.minecraft.core.BlockPos;

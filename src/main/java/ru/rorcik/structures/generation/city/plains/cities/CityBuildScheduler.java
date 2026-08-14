@@ -1,4 +1,3 @@
-// FILE: ./main/java/ru/rorcik/structures/generation/city/plains/cities/CityBuildScheduler.java
 package ru.rorcik.structures.generation.city.plains.cities;
 
 import net.minecraft.resources.ResourceLocation;
@@ -44,7 +43,6 @@ public class CityBuildScheduler {
     private static int warmupTicks = 0;
     private static final int WARMUP_TICKS = 15;
 
-    // Скорость прелоада: 6/тик вместе с чанками, 15/тик когда чанки уже загружены
     private static final int PRELOAD_PER_TICK_DURING_CHUNKS = 6;
     private static final int PRELOAD_PER_TICK_BEFORE_BUILD = 15;
 
@@ -59,7 +57,6 @@ public class CityBuildScheduler {
     public static void scheduleChunkLoading(Set<Long> chunkKeys, Runnable whenReady) {
         chunkQueue.clear();
         buildQueue.clear();
-        // НЕ очищаем preloadQueue — шаблоны дорог уже могут быть в очереди!
 
         for (long key : chunkKeys) {
             int cx = (int) (key >> 32);
@@ -116,12 +113,10 @@ public class CityBuildScheduler {
         ServerLevel level = server.overworld();
         if (level == null) return;
 
-        // ФАЗА 1: Загрузка чанков + фоновый прелоад дорог
         if (!chunkQueue.isEmpty()) {
             processChunkLoading(level);
             processPreloadQueue(PRELOAD_PER_TICK_DURING_CHUNKS);
         }
-        // ФАЗА 2: Чанки загружены, запускаем аллокацию слотов (если еще не запущена)
         else if (onChunksReady != null) {
             if (preloadQueue.isEmpty()) {
                 long elapsed = System.currentTimeMillis() - chunkLoadStartTime;
@@ -129,12 +124,11 @@ public class CityBuildScheduler {
                         totalChunks, elapsed, preloadedCount);
                 Runnable callback = onChunksReady;
                 onChunksReady = null;
-                callback.run(); // Здесь вызовется queuePreload для зданий
+                callback.run();
             } else {
                 processPreloadQueue(PRELOAD_PER_TICK_DURING_CHUNKS);
             }
         }
-        // ФАЗА 3: Прелоад шаблонов зданий ПЕРЕД началом строительства (БЕЗ стройки!)
         else if (!preloadQueue.isEmpty()) {
             processPreloadQueue(PRELOAD_PER_TICK_BEFORE_BUILD);
 
@@ -144,11 +138,9 @@ public class CityBuildScheduler {
                 lastLogTimeMs = now;
             }
         }
-        // ФАЗА 4: Строительство (кэш уже полностью готов, промахов не будет)
         else if (!buildQueue.isEmpty()) {
             processBuildActions();
         }
-        // ФАЗА 5: Завершение
         else {
             finishGeneration();
         }

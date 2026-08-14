@@ -17,8 +17,10 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class HouseConfigLoader implements IConfigLoader {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -39,7 +41,7 @@ public class HouseConfigLoader implements IConfigLoader {
 
                         List<RoomSlot> updatedRooms = new ArrayList<>();
                         for (RoomSlot room : config.rooms()) {
-                            int roomDecorCount = countRoomDecorations(resourceManager, config.type(), room.nbt());
+                            RoomDecorInfo roomDecorInfo = countRoomDecorations(resourceManager, config.type(), room.nbt());
 
                             RoomSlot updatedRoom = new RoomSlot(
                                     room.nbt(),
@@ -52,7 +54,8 @@ public class HouseConfigLoader implements IConfigLoader {
                                     room.variant(),
                                     room.mirrorX(),
                                     room.mirrorZ(),
-                                    roomDecorCount
+                                    roomDecorInfo.count(),
+                                    roomDecorInfo.baseDecors()
                             );
 
                             updatedRooms.add(updatedRoom);
@@ -82,6 +85,8 @@ public class HouseConfigLoader implements IConfigLoader {
         CONFIGS.clear();
     }
 
+    private record RoomDecorInfo(int count, Set<Integer> baseDecors) {}
+
     private static int countHouseDecorations(ResourceManager resourceManager, String houseType) {
         int maxDecor = -1;
         String housesPath = ModPaths.STRUCTURES_CITIES_PLAINS + "/houses";
@@ -108,8 +113,9 @@ public class HouseConfigLoader implements IConfigLoader {
         return maxDecor + 1;
     }
 
-    private static int countRoomDecorations(ResourceManager resourceManager, String houseType, String roomNbt) {
+    private static RoomDecorInfo countRoomDecorations(ResourceManager resourceManager, String houseType, String roomNbt) {
         int maxDecor = -1;
+        Set<Integer> baseDecors = new HashSet<>();
         String roomsPath = ModPaths.STRUCTURES_CITIES_PLAINS_ROOMS + "/" + houseType;
         Map<ResourceLocation, Resource> resources = resourceManager.listResources(
                 roomsPath,
@@ -125,14 +131,23 @@ public class HouseConfigLoader implements IConfigLoader {
             String simpleName = path.substring(path.lastIndexOf('/') + 1);
 
             if (simpleName.startsWith(prefix) && simpleName.endsWith(".nbt")) {
-                String afterPrefix = simpleName.substring(prefix.length(), simpleName.length() - 4)
-                        .replaceAll("_[vg]+$", "");
-                if (afterPrefix.matches("\\d+")) {
-                    maxDecor = Math.max(maxDecor, Integer.parseInt(afterPrefix));
+                String afterPrefix = simpleName.substring(prefix.length(), simpleName.length() - 4);
+
+                boolean hasVariantSuffix = afterPrefix.matches("\\d+_[vg]+$");
+                String numberPart = afterPrefix.replaceAll("_[vg]+$", "");
+
+                if (numberPart.matches("\\d+")) {
+                    int decorIndex = Integer.parseInt(numberPart);
+                    maxDecor = Math.max(maxDecor, decorIndex);
+
+                    if (!hasVariantSuffix) {
+                        baseDecors.add(decorIndex);
+                    }
                 }
             }
         }
-        return maxDecor + 1;
+
+        return new RoomDecorInfo(maxDecor + 1, baseDecors);
     }
 
     public static HouseConfig getConfig(String type) {
