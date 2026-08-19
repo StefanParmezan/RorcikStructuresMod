@@ -37,19 +37,6 @@ public class BuildingGenerator implements IStructureGenerator {
         StructureUtils.placeStructure(level, origin, nbtPath, rotation, false, false);
     }
 
-    public static void generateBuildings(
-            ServerLevel level,
-            RoadNetwork network,
-            Map<BlockPos, RoadNode> nodeMap,
-            Set<BlockPos> straightPositions,
-            RandomSource random
-    ) {
-        List<Runnable> actions = collectBuildActions(level, network, nodeMap, straightPositions, random);
-        for (Runnable action : actions) {
-            action.run();
-        }
-    }
-
     public static List<Runnable> collectBuildActions(
             ServerLevel level,
             RoadNetwork network,
@@ -89,7 +76,7 @@ public class BuildingGenerator implements IStructureGenerator {
                 if (config != null) {
                     for (RoomSlot room : config.rooms()) {
                         for (int i = 0; i < room.repeat(); i++) {
-                            final int floorIndex = i;
+                            final int floorIndex = room.startFloor() + i;
                             actions.add(() -> BuildingPlacer.placeHouseRoom(level, slot, room, floorIndex));
                         }
                     }
