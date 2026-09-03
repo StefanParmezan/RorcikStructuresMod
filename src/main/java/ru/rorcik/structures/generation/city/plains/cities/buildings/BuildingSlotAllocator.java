@@ -2,6 +2,7 @@ package ru.rorcik.structures.generation.city.plains.cities.buildings;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Rotation;
 import org.slf4j.Logger;
@@ -10,7 +11,6 @@ import ru.rorcik.structures.data.city.plains.config_loaders.BuildingConfigLoader
 import ru.rorcik.structures.data.city.plains.config_loaders.ParkConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.BuildingSlot;
 import ru.rorcik.structures.data.city.plains.containers.ParkConfig;
-import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 import ru.rorcik.structures.data.city.plains.containers.RoadNode;
 import ru.rorcik.structures.generation.GeneratorConfig;
 
@@ -28,6 +28,7 @@ public class BuildingSlotAllocator {
     private static final String PARKS_CATEGORY = "parks";
 
     public static List<BuildingSlot> allocateSlots(
+            ServerLevel level,
             Map<BlockPos, RoadNode> nodeMap,
             Set<BlockPos> straightPositions,
             Set<BlockPos> parkOccupiedSlots,
@@ -35,14 +36,15 @@ public class BuildingSlotAllocator {
     ) {
         Map<BlockPos, BuildingSlot> occupiedSlots = new HashMap<>();
         List<BuildingSlot> slots = new ArrayList<>();
+
         Set<BlockPos> roadPositions = collectRoadPositions(nodeMap, straightPositions);
 
         for (BlockPos parkPos : parkOccupiedSlots) {
             occupiedSlots.put(parkPos, null);
         }
 
-        allocateFromNodes(nodeMap, occupiedSlots, slots, random, roadPositions);
-        allocateFromStraights(nodeMap, straightPositions, occupiedSlots, slots, random, roadPositions);
+        allocateFromNodes(level, nodeMap, occupiedSlots, slots, random, roadPositions);
+        allocateFromStraights(level, nodeMap, straightPositions, occupiedSlots, slots, random, roadPositions);
 
         int layer1Count = slots.size();
         LOGGER.info("[SLOTS] Layer 1: {} slots allocated", layer1Count);
@@ -52,8 +54,10 @@ public class BuildingSlotAllocator {
             int beforeCount = slots.size();
             List<BuildingSlot> nextLayer = allocateNextLayer(currentLayer, occupiedSlots, slots, random, depth, roadPositions);
             int addedCount = slots.size() - beforeCount;
+
             LOGGER.info("[SLOTS] Layer {}: {} new slots added (total: {})",
                     depth + 1, addedCount, slots.size());
+
             currentLayer = nextLayer;
         }
 
@@ -81,6 +85,7 @@ public class BuildingSlotAllocator {
 
         LOGGER.info("[SLOTS] Final breakdown: buildings={}, parks={} (square={}, rect={}), platforms={}, total={}",
                 buildingCount, parkCount, squareParkCount, rectParkCount, platformCount, slots.size());
+
         return slots;
     }
 
@@ -102,6 +107,7 @@ public class BuildingSlotAllocator {
     }
 
     private static void allocateFromNodes(
+            ServerLevel level,
             Map<BlockPos, RoadNode> nodeMap,
             Map<BlockPos, BuildingSlot> occupiedSlots,
             List<BuildingSlot> slots,
@@ -125,12 +131,14 @@ public class BuildingSlotAllocator {
                 if (side.getAxis().isVertical()) continue;
                 if (connections.contains(side)) continue;
                 if (side == deadEndExcludedSide) continue;
-                tryAllocateSlot(nodePos, side, occupiedSlots, slots, random, roadPositions);
+
+                tryAllocateSlot(level, nodePos, side, occupiedSlots, slots, random, roadPositions);
             }
         }
     }
 
     private static void allocateFromStraights(
+            ServerLevel level,
             Map<BlockPos, RoadNode> nodeMap,
             Set<BlockPos> straightPositions,
             Map<BlockPos, BuildingSlot> occupiedSlots,
@@ -145,8 +153,8 @@ public class BuildingSlotAllocator {
 
             Direction left = roadDirection.getCounterClockWise();
             Direction right = roadDirection.getClockWise();
-            tryAllocateSlot(pos, left, occupiedSlots, slots, random, roadPositions);
-            tryAllocateSlot(pos, right, occupiedSlots, slots, random, roadPositions);
+            tryAllocateSlot(level, pos, left, occupiedSlots, slots, random, roadPositions);
+            tryAllocateSlot(level, pos, right, occupiedSlots, slots, random, roadPositions);
         }
     }
 
@@ -307,6 +315,7 @@ public class BuildingSlotAllocator {
     }
 
     private static void tryAllocateSlot(
+            ServerLevel level,
             BlockPos nodePos,
             Direction side,
             Map<BlockPos, BuildingSlot> occupiedSlots,
@@ -322,14 +331,16 @@ public class BuildingSlotAllocator {
         if (roadPositions.contains(buildingPos)) return;
 
         String category = chooseCategory(random);
+
         if (category.equals(PARKS_CATEGORY) && GeneratorConfig.SPAWN_PARKS) {
-            if (tryAllocatePark(nodePos, side, buildingPos, occupiedSlots, slots, random, roadPositions)) {
+            if (tryAllocatePark(level, nodePos, side, buildingPos, occupiedSlots, slots, random, roadPositions)) {
                 return;
             }
             category = "houses";
         }
 
         String buildingName = chooseBuilding(random, category);
+
         if (buildingName == null) {
             LOGGER.warn("No building found for category: {}", category);
             return;
@@ -343,11 +354,13 @@ public class BuildingSlotAllocator {
         BuildingSlot slot = new BuildingSlot(
                 buildingPos, rotation, side, category, buildingName, maxDepth
         );
+
         slots.add(slot);
         occupiedSlots.put(buildingPos, slot);
     }
 
     private static boolean tryAllocatePark(
+            ServerLevel level,
             BlockPos nodePos,
             Direction side,
             BlockPos buildingPos,
@@ -357,14 +370,17 @@ public class BuildingSlotAllocator {
             Set<BlockPos> roadPositions
     ) {
         List<ParkConfig> parks = ParkConfigLoader.getParks();
-        List<ParkConfig> availableParks = ParkPlacer.filterParks(parks);
+        List<ParkConfig> availableParks = ParkPlacer.filterAvailableParks(level, parks);
+
         if (availableParks.isEmpty()) return false;
 
         int maxAttempts = 3;
+
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
             ParkConfig park = availableParks.get(random.nextInt(availableParks.size()));
             boolean isSquare = park.size()[0] == park.size()[2];
             Rotation rotation = ParkPlacer.calculateRotationForSide(side);
+
             Set<BlockPos> parkSlots = ParkPlacer.calculateSlots(nodePos, side, park, rotation);
 
             boolean canPlace = true;
@@ -380,10 +396,12 @@ public class BuildingSlotAllocator {
                 BuildingSlot parkSlot = new BuildingSlot(
                         buildingPos, rotation, side, PARKS_CATEGORY, park.name(), 0
                 );
+
                 slots.add(parkSlot);
                 for (BlockPos slot : parkSlots) {
                     occupiedSlots.put(slot, parkSlot);
                 }
+
                 LOGGER.info("[PARK-ALLOC] Placed '{}' ({}) at {} side {} ({} slots, attempt {})",
                         park.name(), isSquare ? "SQUARE" : "RECT",
                         nodePos.toShortString(), side, parkSlots.size(), attempt + 1);

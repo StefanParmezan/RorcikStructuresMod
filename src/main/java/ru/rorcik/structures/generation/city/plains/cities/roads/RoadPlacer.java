@@ -98,11 +98,11 @@ public class RoadPlacer {
         };
     }
 
-    public static void generateSingleRoad(ServerLevel level, BlockPos origin, String type, Rotation rotation, int forcedDecor) {
+    public static RoadSegment generateSingleRoad(ServerLevel level, BlockPos origin, String type, Rotation rotation, int forcedDecor) {
         RoadConfig config = RoadConfigLoader.getConfig(type);
         if (config == null) {
             LOGGER.error("Road config '{}' not found", type);
-            return;
+            return null;
         }
 
         int decorCount = config.decorCount();
@@ -111,5 +111,6 @@ public class RoadPlacer {
 
         RoadSegment segment = new RoadSegment(type, origin, rotation, decor, connections);
         placeRoad(level, segment, config);
+        return segment;
     }
 }

@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import org.slf4j.Logger;
@@ -58,8 +59,8 @@ public class ParkPlacer {
 
         Direction depthDir = side;
         Direction widthDir = side.getClockWise();
-        int depthSlots, widthSlots;
 
+        int depthSlots, widthSlots;
         if (depthDir == Direction.NORTH || depthDir == Direction.SOUTH) {
             depthSlots = slotsAlongZ;
             widthSlots = slotsAlongX;
@@ -88,6 +89,9 @@ public class ParkPlacer {
         StructureUtils.placeStructureUsingOriginPivot(
                 level, placementPos, ModPaths.parkNbtPath(park.name()), rotation, false, false
         );
+
+        ParkWorldTracker tracker = ParkWorldTracker.get(level);
+        tracker.increment(park.name());
     }
 
     private static BlockPos calculatePlacementOrigin(BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
@@ -99,7 +103,6 @@ public class ParkPlacer {
 
     public static List<ParkConfig> filterParks(List<ParkConfig> allParks) {
         if (!GeneratorConfig.PARK_ONLY_RECT) return allParks;
-
         List<ParkConfig> rectParks = new ArrayList<>();
         for (ParkConfig park : allParks) {
             int[] baseSize = getParkBaseSize(park);
@@ -108,6 +111,48 @@ public class ParkPlacer {
             }
         }
         return rectParks;
+    }
+
+    public static List<ParkConfig> filterAvailableParks(ServerLevel level, List<ParkConfig> allParks) {
+        List<ParkConfig> filtered = filterParks(allParks);
+        ParkWorldTracker tracker = ParkWorldTracker.get(level);
+
+        List<ParkConfig> available = new ArrayList<>();
+        for (ParkConfig park : filtered) {
+            int currentCount = tracker.getCount(park.name());
+            if (park.canSpawn(currentCount)) {
+                available.add(park);
+            } else {
+                LOGGER.debug("[PARK] '{}' reached world limit ({}/{}), skipping",
+                        park.name(), currentCount, park.worldCount());
+            }
+        }
+
+        return available;
+    }
+
+    public static ParkConfig findReplacementPark(ServerLevel level, ParkConfig original, RandomSource random) {
+        List<ParkConfig> largeParks = ParkConfigLoader.getParks().stream()
+                .filter(p -> p.size()[0] >= 128 && p.size()[2] >= 128)
+                .toList();
+
+        ParkWorldTracker tracker = ParkWorldTracker.get(level);
+
+        List<ParkConfig> available = new ArrayList<>();
+        for (ParkConfig park : largeParks) {
+            if (park.name().equals(original.name())) continue;
+            int currentCount = tracker.getCount(park.name());
+            if (park.canSpawn(currentCount)) {
+                available.add(park);
+            }
+        }
+
+        if (available.isEmpty()) {
+            LOGGER.warn("[PARK] No replacement parks available for '{}'", original.name());
+            return null;
+        }
+
+        return available.get(random.nextInt(available.size()));
     }
 
     private static boolean isRotated90(Rotation rotation) {
@@ -150,6 +195,7 @@ public class ParkPlacer {
         LOGGER.info("[PARK-TEST] Park: {} | Rotation: {} | Side: {}", parkName, rotation, side);
         LOGGER.info("[PARK-TEST] PlayerPos: {}", playerPos.toShortString());
         LOGGER.info("[PARK-TEST] Virtual roadPos: {}", roadPos.toShortString());
+
         for (BlockPos s : slots) {
             LOGGER.info("[PARK-TEST]   Slot: {}", s.toShortString());
         }

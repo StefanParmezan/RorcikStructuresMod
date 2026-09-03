@@ -8,5 +8,6 @@ public record RoadConfig(
         int[] size,
         int decorCount,
         List<String> connections,
-        List<Integer> stopVariants
+        List<Integer> stopVariants,
+        List<RoadDecoration> decorations
 ) {}

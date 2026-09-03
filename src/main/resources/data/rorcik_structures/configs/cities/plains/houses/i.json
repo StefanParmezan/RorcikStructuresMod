@@ -235,7 +235,7 @@
     },
     {
       "nbt": "i_living3",
-      "position": [42, 2, 54],
+      "position": [44, 2, 54],
       "offset": [1, 1, 1],
       "size": [9, 3, 9],
       "rotation": 180,

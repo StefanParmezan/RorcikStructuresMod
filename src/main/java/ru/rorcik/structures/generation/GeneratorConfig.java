@@ -7,7 +7,7 @@ public final class GeneratorConfig {
     public static final int BUILDING_DISTANCE = 64;
 
     public static final int STRAIGHT_BETWEEN_NODES = 2;
-    public static final int MAX_GRAPH_DEPTH = 7;
+    public static final int MAX_GRAPH_DEPTH = 5;
     public static final int MAX_NODES = 70;
 
     public static final int BUILDING_MIN_DEPTH = 2;

@@ -13,6 +13,7 @@ import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.RoadConfig;
 import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 import ru.rorcik.structures.data.city.plains.containers.RoadNode;
+import ru.rorcik.structures.data.city.plains.containers.RoadSegment;
 import ru.rorcik.structures.generation.GeneratorConfig;
 import ru.rorcik.structures.generation.city.plains.cities.CityBuildScheduler;
 import ru.rorcik.structures.generation.city.plains.cities.buildings.BuildingGenerator;
@@ -39,18 +40,30 @@ public class RoadNetworkGenerator {
 
         CityBuildScheduler.scheduleChunkLoading(chunkKeys, () -> {
             LOGGER.info("Chunks ready, building city...");
+
             RoadNetwork network = new RoadNetwork();
             List<Runnable> allActions = new ArrayList<>();
+
             collectRoadActions(level, network, random, root, new HashSet<>(), allActions);
             int roadCount = allActions.size();
+
+            List<ResourceLocation> decorTemplates = RoadDecorationsPlacer.collectRequiredDecorTemplates(network);
+            if (!decorTemplates.isEmpty()) {
+                CityBuildScheduler.queuePreload(decorTemplates);
+                LOGGER.info("[BUILD] Queued {} road decor templates for preloading", decorTemplates.size());
+            }
+
+            RoadDecorationsPlacer.collectDecorationActions(level, network, random, allActions);
+            int decorCount = allActions.size() - roadCount;
 
             List<Runnable> buildingActions = BuildingGenerator.collectBuildActions(
                     level, network, nodeMap, straightPositions, random
             );
             allActions.addAll(buildingActions);
 
-            LOGGER.info("Scheduled {} road actions + {} building actions = {} total",
-                    roadCount, buildingActions.size(), allActions.size());
+            LOGGER.info("Scheduled {} road actions + {} decor actions + {} building actions = {} total",
+                    roadCount, decorCount, buildingActions.size(), allActions.size());
+
             CityBuildScheduler.scheduleBuildActions(allActions);
         });
     }
@@ -104,7 +117,12 @@ public class RoadNetworkGenerator {
                 BlockPos pos = node.position();
                 String type = entry.type();
                 Rotation rot = entry.rotation();
-                actions.add(() -> RoadPlacer.createAndPlaceRoad(level, network, type, pos, rot, random));
+                actions.add(() -> {
+                    RoadSegment segment = RoadPlacer.createAndPlaceRoad(level, network, type, pos, rot, random);
+                    if (segment != null) {
+                        RoadDecorationsPlacer.placeDecorationsForSingleRoad(level, segment, random);
+                    }
+                });
             }
         }
 
@@ -116,7 +134,12 @@ public class RoadNetworkGenerator {
             for (int i = 0; i < GeneratorConfig.STRAIGHT_BETWEEN_NODES; i++) {
                 BlockPos straightPos = currentPos;
                 if (!network.hasSegmentAt(straightPos)) {
-                    actions.add(() -> RoadPlacer.createAndPlaceRoad(level, network, "s", straightPos, sRotation, random));
+                    actions.add(() -> {
+                        RoadSegment segment = RoadPlacer.createAndPlaceRoad(level, network, "s", straightPos, sRotation, random);
+                        if (segment != null) {
+                            RoadDecorationsPlacer.placeDecorationsForSingleRoad(level, segment, random);
+                        }
+                    });
                 }
                 currentPos = RoadNetwork.getNextPosition(currentPos, exitDir, GeneratorConfig.ROAD_STEP);
             }

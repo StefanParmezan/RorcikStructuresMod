@@ -2,5 +2,8 @@
   "type": "t",
   "offset": [0, -3, 0],
   "size": [64, 64, 64],
-  "connections": ["NORTH", "SOUTH", "WEST"]
+  "connections": ["NORTH", "SOUTH", "WEST"],
+  "decorations": [
+    {"offset": [64, -1, 64], "rotation": 180}
+  ]
 }

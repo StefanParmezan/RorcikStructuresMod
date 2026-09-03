@@ -1,5 +1,6 @@
 {
   "name": "park_1",
   "size": [128, 128, 128],
-  "yOffset": -6
+  "yOffset": -6,
+  "worldCount": -1
 }

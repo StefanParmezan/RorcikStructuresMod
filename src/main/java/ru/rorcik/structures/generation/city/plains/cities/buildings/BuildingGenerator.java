@@ -45,7 +45,7 @@ public class BuildingGenerator implements IStructureGenerator {
             RandomSource random
     ) {
         List<BuildingSlot> slots = BuildingSlotAllocator.allocateSlots(
-                nodeMap, straightPositions, new HashSet<>(), random
+                level, nodeMap, straightPositions, new HashSet<>(), random
         );
         LOGGER.info("[BUILD] Collected {} building slots for batched placement", slots.size());
 

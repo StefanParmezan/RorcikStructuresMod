@@ -15,8 +15,10 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
+import ru.rorcik.structures.data.city.plains.containers.RoadSegment;
 import ru.rorcik.structures.generation.city.plains.cities.CityGenerator;
 import ru.rorcik.structures.generation.city.plains.cities.buildings.ParkPlacer;
+import ru.rorcik.structures.generation.city.plains.cities.roads.RoadDecorationsPlacer;
 import ru.rorcik.structures.generation.city.plains.houses.HouseGenerator;
 import ru.rorcik.structures.generation.city.plains.cities.roads.RoadPlacer;
 
@@ -182,6 +184,49 @@ public class ModCommands {
 
                                                     ctx.getSource().sendSuccess(() ->
                                                             Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees and decor " + decor), true);
+                                                    return 1;
+                                                })
+                                                .then(Commands.literal("withdecor")
+                                                        .executes(ctx -> {
+                                                            String type = StringArgumentType.getString(ctx, "type");
+                                                            int rotValue = IntegerArgumentType.getInteger(ctx, "rotation");
+                                                            int decor = IntegerArgumentType.getInteger(ctx, "decor");
+                                                            Rotation rotation = Rotation.values()[rotValue];
+                                                            ServerLevel level = ctx.getSource().getLevel();
+                                                            BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
+
+                                                            LOGGER.info("Generating road type: {} with rotation: {} degrees, decor: {} and road decorations",
+                                                                    type, rotValue * 90, decor);
+
+                                                            RoadSegment segment = RoadPlacer.generateSingleRoad(level, pos, type, rotation, decor);
+                                                            if (segment != null) {
+                                                                RoadDecorationsPlacer.placeDecorationsForSingleRoad(level, segment, level.getRandom());
+                                                            }
+
+                                                            ctx.getSource().sendSuccess(() ->
+                                                                    Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees, decor " + decor + " and decorations"), true);
+                                                            return 1;
+                                                        })
+                                                )
+                                        )
+                                        .then(Commands.literal("withdecor")
+                                                .executes(ctx -> {
+                                                    String type = StringArgumentType.getString(ctx, "type");
+                                                    int rotValue = IntegerArgumentType.getInteger(ctx, "rotation");
+                                                    Rotation rotation = Rotation.values()[rotValue];
+                                                    ServerLevel level = ctx.getSource().getLevel();
+                                                    BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
+
+                                                    LOGGER.info("Generating road type: {} with rotation: {} degrees and road decorations",
+                                                            type, rotValue * 90);
+
+                                                    RoadSegment segment = RoadPlacer.generateSingleRoad(level, pos, type, rotation, -1);
+                                                    if (segment != null) {
+                                                        RoadDecorationsPlacer.placeDecorationsForSingleRoad(level, segment, level.getRandom());
+                                                    }
+
+                                                    ctx.getSource().sendSuccess(() ->
+                                                            Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees and decorations"), true);
                                                     return 1;
                                                 })
                                         )

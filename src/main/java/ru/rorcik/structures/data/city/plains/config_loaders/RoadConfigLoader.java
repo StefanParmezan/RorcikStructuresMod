@@ -12,6 +12,7 @@ import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.api.IConfigLoader;
 import ru.rorcik.structures.common.ModPaths;
 import ru.rorcik.structures.data.city.plains.containers.RoadConfig;
+import ru.rorcik.structures.data.city.plains.containers.RoadDecoration;
 import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 
 import java.io.InputStream;
@@ -49,6 +50,9 @@ public class RoadConfigLoader implements IConfigLoader {
                         List<String> connections = rawConfig.connections() != null
                                 ? rawConfig.connections()
                                 : Collections.emptyList();
+                        List<RoadDecoration> decorations = rawConfig.decorations() != null
+                                ? rawConfig.decorations()
+                                : Collections.emptyList();
 
                         RoadConfig finalConfig = new RoadConfig(
                                 rawConfig.type(),
@@ -56,12 +60,13 @@ public class RoadConfigLoader implements IConfigLoader {
                                 rawConfig.size(),
                                 decorCount,
                                 connections,
-                                stopVariants
+                                stopVariants,
+                                decorations
                         );
 
                         CONFIGS.put(finalConfig.type(), finalConfig);
-                        LOGGER.info("Loaded road config '{}' ({} variants, {} connections)",
-                                finalConfig.type(), decorCount, connections.size());
+                        LOGGER.info("Loaded road config '{}' ({} variants, {} connections, {} decorations)",
+                                finalConfig.type(), decorCount, connections.size(), decorations.size());
 
                     } catch (Exception e) {
                         LOGGER.error("Failed to load road config: {}", location, e);
