@@ -40,13 +40,10 @@ public class BuildingGenerator implements IStructureGenerator {
     public static List<Runnable> collectBuildActions(
             ServerLevel level,
             RoadNetwork network,
+            List<BuildingSlot> slots,
             Map<BlockPos, RoadNode> nodeMap,
-            Set<BlockPos> straightPositions,
             RandomSource random
     ) {
-        List<BuildingSlot> slots = BuildingSlotAllocator.allocateSlots(
-                level, nodeMap, straightPositions, new HashSet<>(), random
-        );
         LOGGER.info("[BUILD] Collected {} building slots for batched placement", slots.size());
 
         Set<ResourceLocation> requiredTemplates = collectRequiredTemplates(slots, nodeMap);
@@ -89,6 +86,7 @@ public class BuildingGenerator implements IStructureGenerator {
 
         LOGGER.info("[BUILD] Breakdown: buildings={}, parks={}, platforms={}, total_actions={}",
                 buildingCount, parkCount, platformCount, actions.size());
+
         return actions;
     }
 

@@ -10,13 +10,12 @@ import net.minecraft.world.level.block.Rotation;
 import org.slf4j.Logger;
 import ru.rorcik.structures.common.ModPaths;
 import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
-import ru.rorcik.structures.data.city.plains.containers.RoadConfig;
-import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
-import ru.rorcik.structures.data.city.plains.containers.RoadNode;
-import ru.rorcik.structures.data.city.plains.containers.RoadSegment;
+import ru.rorcik.structures.data.city.plains.containers.*;
 import ru.rorcik.structures.generation.GeneratorConfig;
 import ru.rorcik.structures.generation.city.plains.cities.CityBuildScheduler;
 import ru.rorcik.structures.generation.city.plains.cities.buildings.BuildingGenerator;
+import ru.rorcik.structures.generation.city.plains.cities.buildings.BuildingSlotAllocator;
+import ru.rorcik.structures.generation.city.plains.cities.buildings.SidewalkPlacer;
 
 import java.util.*;
 
@@ -27,11 +26,13 @@ public class RoadNetworkGenerator {
     public static void generateRoadNetwork(ServerLevel level, BlockPos origin, long seed, int maxSegments) {
         long uniqueSeed = seed ^ origin.hashCode() ^ System.nanoTime() ^ level.getRandom().nextLong();
         RandomSource random = RandomSource.create(uniqueSeed);
+
         Map<BlockPos, RoadNode> nodeMap = new HashMap<>();
         Set<BlockPos> straightPositions = new HashSet<>();
         RoadNode root = RoadGraphBuilder.buildGraph(random, origin, Direction.SOUTH, 0, nodeMap, straightPositions);
 
         Set<Long> chunkKeys = collectChunkKeys(nodeMap.keySet(), straightPositions);
+
         LOGGER.info("Graph built: {} nodes, {} straights, {} chunks needed",
                 nodeMap.size(), straightPositions.size(), chunkKeys.size());
 
@@ -47,22 +48,26 @@ public class RoadNetworkGenerator {
             collectRoadActions(level, network, random, root, new HashSet<>(), allActions);
             int roadCount = allActions.size();
 
-            List<ResourceLocation> decorTemplates = RoadDecorationsPlacer.collectRequiredDecorTemplates(network);
-            if (!decorTemplates.isEmpty()) {
-                CityBuildScheduler.queuePreload(decorTemplates);
-                LOGGER.info("[BUILD] Queued {} road decor templates for preloading", decorTemplates.size());
-            }
-
-            RoadDecorationsPlacer.collectDecorationActions(level, network, random, allActions);
-            int decorCount = allActions.size() - roadCount;
+            List<BuildingSlot> slots = BuildingSlotAllocator.allocateSlots(
+                    level, nodeMap, straightPositions, new HashSet<>(), random
+            );
 
             List<Runnable> buildingActions = BuildingGenerator.collectBuildActions(
-                    level, network, nodeMap, straightPositions, random
+                    level, network, slots, nodeMap, random
             );
             allActions.addAll(buildingActions);
 
-            LOGGER.info("Scheduled {} road actions + {} decor actions + {} building actions = {} total",
-                    roadCount, decorCount, buildingActions.size(), allActions.size());
+            List<Runnable> sidewalkActions = SidewalkPlacer.collectSidewalkActions(slots, level, random);
+            allActions.addAll(sidewalkActions);
+
+            List<ResourceLocation> sidewalkTemplates = SidewalkPlacer.collectRequiredTemplates();
+            if (!sidewalkTemplates.isEmpty()) {
+                CityBuildScheduler.queuePreload(sidewalkTemplates);
+                LOGGER.info("[BUILD] Queued {} sidewalk templates for preloading", sidewalkTemplates.size());
+            }
+
+            LOGGER.info("Scheduled {} road actions + {} building actions + {} sidewalk actions = {} total",
+                    roadCount, buildingActions.size(), sidewalkActions.size(), allActions.size());
 
             CityBuildScheduler.scheduleBuildActions(allActions);
         });

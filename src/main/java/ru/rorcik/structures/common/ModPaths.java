@@ -11,10 +11,13 @@ public final class ModPaths {
     public static final String STRUCTURES_CITIES_PLAINS = "structures/cities/plains";
     public static final String STRUCTURES_CITIES_PLAINS_ROOMS = "structures/cities/plains/rooms";
     public static final String STRUCTURES_CITIES_PLAINS_ROADS = "structures/cities/plains/roads";
-    public static final String STRUCTURES_CITIES_PLAINS_ROAD_DECOR = "structures/cities/plains/road_decor";
 
     public static String houseNbtPath(String houseNbt) {
         return RorcikStructuresMod.MODID + ":cities/plains/houses/" + houseNbt;
+    }
+
+    public static String sidewalkNbtPath(String sidewalkName) {
+        return RorcikStructuresMod.MODID + ":cities/plains/sidewalks/" + sidewalkName;
     }
 
     public static String roomNbtPath(String houseType, String roomNbt) {
