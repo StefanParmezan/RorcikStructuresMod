@@ -9,6 +9,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Rotation;
 import org.slf4j.Logger;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.*;
 import ru.rorcik.structures.generation.GeneratorConfig;
@@ -36,41 +37,45 @@ public class RoadNetworkGenerator {
         LOGGER.info("Graph built: {} nodes, {} straights, {} chunks needed",
                 nodeMap.size(), straightPositions.size(), chunkKeys.size());
 
-        Set<ResourceLocation> roadTemplates = collectRoadTemplates(nodeMap);
-        CityBuildScheduler.queuePreload(roadTemplates);
+        RoadNetwork network = new RoadNetwork();
+        List<CityBuildScheduler.GenerationPhase> phases = new ArrayList<>();
 
-        CityBuildScheduler.scheduleChunkLoading(chunkKeys, () -> {
-            LOGGER.info("Chunks ready, building city...");
+        List<Runnable> roadActions = new ArrayList<>();
+        collectRoadActions(level, network, random, root, new HashSet<>(), roadActions);
+        phases.add(new CityBuildScheduler.GenerationPhase(
+                "Roads & Decorations",
+                collectRoadTemplates(nodeMap),
+                roadActions,
+                StructureCache.Category.ROADS
+        ));
 
-            RoadNetwork network = new RoadNetwork();
-            List<Runnable> allActions = new ArrayList<>();
+        List<BuildingSlot> slots = BuildingSlotAllocator.allocateSlots(level, nodeMap, straightPositions, new HashSet<>(), random);
 
-            collectRoadActions(level, network, random, root, new HashSet<>(), allActions);
-            int roadCount = allActions.size();
+        List<Runnable> buildingActions = BuildingGenerator.collectBuildActions(level, slots);
+        phases.add(new CityBuildScheduler.GenerationPhase(
+                "Buildings & Platforms",
+                BuildingGenerator.collectRequiredBuildTemplates(slots),
+                buildingActions,
+                StructureCache.Category.BUILDINGS
+        ));
 
-            List<BuildingSlot> slots = BuildingSlotAllocator.allocateSlots(
-                    level, nodeMap, straightPositions, new HashSet<>(), random
-            );
+        List<Runnable> roomActions = BuildingGenerator.collectRoomPlacementActions(level, slots, random);
+        phases.add(new CityBuildScheduler.GenerationPhase(
+                "Rooms (Interiors)",
+                BuildingGenerator.collectRequiredRoomTemplates(slots),
+                roomActions,
+                StructureCache.Category.ROOMS
+        ));
 
-            List<Runnable> buildingActions = BuildingGenerator.collectBuildActions(
-                    level, network, slots, nodeMap, random
-            );
-            allActions.addAll(buildingActions);
+        List<Runnable> sidewalkActions = SidewalkPlacer.collectSidewalkActions(slots, level, random);
+        phases.add(new CityBuildScheduler.GenerationPhase(
+                "Sidewalks",
+                SidewalkPlacer.collectRequiredTemplates(),
+                sidewalkActions,
+                StructureCache.Category.SIDEWALKS
+        ));
 
-            List<Runnable> sidewalkActions = SidewalkPlacer.collectSidewalkActions(slots, level, random);
-            allActions.addAll(sidewalkActions);
-
-            List<ResourceLocation> sidewalkTemplates = SidewalkPlacer.collectRequiredTemplates();
-            if (!sidewalkTemplates.isEmpty()) {
-                CityBuildScheduler.queuePreload(sidewalkTemplates);
-                LOGGER.info("[BUILD] Queued {} sidewalk templates for preloading", sidewalkTemplates.size());
-            }
-
-            LOGGER.info("Scheduled {} road actions + {} building actions + {} sidewalk actions = {} total",
-                    roadCount, buildingActions.size(), sidewalkActions.size(), allActions.size());
-
-            CityBuildScheduler.scheduleBuildActions(allActions);
-        });;
+        CityBuildScheduler.startPhasedGeneration(chunkKeys, phases);
     }
 
     private static Set<ResourceLocation> collectRoadTemplates(Map<BlockPos, RoadNode> nodeMap) {

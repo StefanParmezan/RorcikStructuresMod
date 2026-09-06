@@ -1,96 +1,41 @@
 package ru.rorcik.structures.generation.city.plains.cities.buildings;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.block.Rotation;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.api.IStructureGenerator;
 import ru.rorcik.structures.common.ModPaths;
-import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.city.plains.config_loaders.HouseConfigLoader;
-import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.BuildingSlot;
 import ru.rorcik.structures.data.city.plains.containers.HouseConfig;
-import ru.rorcik.structures.data.city.plains.containers.RoadConfig;
-import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
-import ru.rorcik.structures.data.city.plains.containers.RoadNode;
 import ru.rorcik.structures.data.city.plains.containers.RoomSlot;
-import ru.rorcik.structures.generation.StructureUtils;
-import ru.rorcik.structures.generation.city.plains.cities.CityBuildScheduler;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 public class BuildingGenerator implements IStructureGenerator {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     @Override
-    public void generate(ServerLevel level, BlockPos origin, String type, Rotation rotation) {
+    public void generate(ServerLevel level, BlockPos origin, String type, net.minecraft.world.level.block.Rotation rotation) {
         String nbtPath = ModPaths.buildingNbtPath("other", type);
-        StructureUtils.placeStructure(level, origin, nbtPath, rotation, false, false);
+        ru.rorcik.structures.generation.StructureUtils.placeStructure(level, origin, nbtPath, rotation, false, false);
     }
 
-    public static List<Runnable> collectBuildActions(
-            ServerLevel level,
-            RoadNetwork network,
-            List<BuildingSlot> slots,
-            Map<BlockPos, RoadNode> nodeMap,
-            RandomSource random
-    ) {
-        LOGGER.info("[BUILD] Collected {} building slots for batched placement", slots.size());
-
-        Set<ResourceLocation> requiredTemplates = collectRequiredTemplates(slots, nodeMap);
-        if (!requiredTemplates.isEmpty()) {
-            LOGGER.info("[BUILD] Queuing {} building/room templates for interleaved preload",
-                    requiredTemplates.size());
-            CityBuildScheduler.queuePreload(requiredTemplates);
-        }
-
-        int parkCount = 0;
-        int buildingCount = 0;
-        int platformCount = 0;
+    public static List<Runnable> collectBuildActions(ServerLevel level, List<BuildingSlot> slots) {
         List<Runnable> actions = new ArrayList<>();
-
         for (BuildingSlot slot : slots) {
-            switch (slot.category()) {
-                case "parks" -> {
-                    parkCount++;
-                    actions.add(() -> BuildingPlacer.placeBuilding(level, slot));
-                }
-                case "platforms" -> {
-                    platformCount++;
-                    actions.add(() -> BuildingPlacer.placeBuilding(level, slot));
-                }
-                case "houses" -> {
-                    buildingCount++;
-                    actions.add(() -> BuildingPlacer.placeCompleteHouse(level, slot));
-                }
-                default -> {
-                    buildingCount++;
-                    actions.add(() -> BuildingPlacer.placeBuilding(level, slot));
-                }
-            }
+            actions.add(() -> BuildingPlacer.placeBuildingShell(level, slot));
         }
-
-        LOGGER.info("[BUILD] Breakdown: buildings={}, parks={}, platforms={}, total_actions={}",
-                buildingCount, parkCount, platformCount, actions.size());
-
         return actions;
     }
 
-    private static Set<ResourceLocation> collectRequiredTemplates(
-            List<BuildingSlot> slots,
-            Map<BlockPos, RoadNode> nodeMap
-    ) {
+    public static Set<ResourceLocation> collectRequiredBuildTemplates(List<BuildingSlot> slots) {
         Set<ResourceLocation> templates = new HashSet<>();
-
         for (BuildingSlot slot : slots) {
             if (slot.category().equals("houses")) {
                 String houseType = slot.buildingName().toLowerCase();
@@ -98,21 +43,6 @@ public class BuildingGenerator implements IStructureGenerator {
                 if (config != null) {
                     for (int decor = 0; decor < Math.max(1, config.houseDecorCount()); decor++) {
                         addTemplate(templates, ModPaths.houseNbtPath(houseType + "_" + decor));
-                    }
-
-                    for (RoomSlot room : config.rooms()) {
-                        int maxDecor = Math.max(1, room.decorCount());
-                        for (int decor = 0; decor < maxDecor; decor++) {
-                            if (!room.variant().isEmpty()) {
-                                addTemplate(templates, ModPaths.roomNbtPath(config.type(), room.nbt() + "_" + decor + "_" + room.variant()));
-                            }
-                            else if (room.baseDecors().contains(decor)) {
-                                addTemplate(templates, ModPaths.roomNbtPath(config.type(), room.nbt() + "_" + decor));
-                            }
-                            else {
-                                addTemplate(templates, ModPaths.roomNbtPath(config.type(), room.nbt() + "_" + decor + "_v"));
-                            }
-                        }
                     }
                 }
             } else if (slot.category().equals("parks")) {
@@ -123,27 +53,41 @@ public class BuildingGenerator implements IStructureGenerator {
                 addTemplate(templates, ModPaths.buildingNbtPath(slot.category(), slot.buildingName()));
             }
         }
+        return templates;
+    }
 
-        Set<String> usedRoadTypes = new HashSet<>();
-        for (RoadNode node : nodeMap.values()) {
-            List<Direction> connections = node.getAllConnections();
-            if (!connections.isEmpty()) {
-                RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
-                if (entry != null) {
-                    usedRoadTypes.add(entry.type());
+    public static List<Runnable> collectRoomPlacementActions(ServerLevel level, List<BuildingSlot> slots, RandomSource random) {
+        List<Runnable> actions = new ArrayList<>();
+        for (BuildingSlot slot : slots) {
+            if (slot.category().equals("houses")) {
+                actions.add(() -> BuildingPlacer.placeHouseRoomsOnly(level, slot, random));
+            }
+        }
+        return actions;
+    }
+
+    public static Set<ResourceLocation> collectRequiredRoomTemplates(List<BuildingSlot> slots) {
+        Set<ResourceLocation> templates = new HashSet<>();
+        for (BuildingSlot slot : slots) {
+            if (slot.category().equals("houses")) {
+                String houseType = slot.buildingName().toLowerCase();
+                HouseConfig config = HouseConfigLoader.getConfig(houseType);
+                if (config != null) {
+                    for (RoomSlot room : config.rooms()) {
+                        int maxDecor = Math.max(1, room.decorCount());
+                        for (int decor = 0; decor < maxDecor; decor++) {
+                            if (!room.variant().isEmpty()) {
+                                addTemplate(templates, ModPaths.roomNbtPath(config.type(), room.nbt() + "_" + decor + "_" + room.variant()));
+                            } else if (room.baseDecors().contains(decor)) {
+                                addTemplate(templates, ModPaths.roomNbtPath(config.type(), room.nbt() + "_" + decor));
+                            } else {
+                                addTemplate(templates, ModPaths.roomNbtPath(config.type(), room.nbt() + "_" + decor + "_v"));
+                            }
+                        }
+                    }
                 }
             }
         }
-        usedRoadTypes.add("s");
-        for (String roadType : usedRoadTypes) {
-            RoadConfig config = RoadConfigLoader.getConfig(roadType);
-            if (config != null) {
-                for (int decor = 0; decor < Math.max(1, config.decorCount()); decor++) {
-                    addTemplate(templates, ModPaths.roadNbtPath(config.type(), config.type() + "_" + decor));
-                }
-            }
-        }
-
         return templates;
     }
 

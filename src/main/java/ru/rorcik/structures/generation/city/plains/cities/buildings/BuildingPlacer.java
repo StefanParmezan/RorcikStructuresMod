@@ -176,4 +176,48 @@ public class BuildingPlacer {
         );
         StructureUtils.placeStructure(level, compensated, nbtPath, slot.rotation(), false, false);
     }
+    public static void placeBuildingShell(ServerLevel level, BuildingSlot slot) {
+        if (slot.category().equals("houses")) {
+            placeHouseShell(level, slot);
+        } else {
+            placeBuilding(level, slot);
+        }
+    }
+
+    private static void placeHouseShell(ServerLevel level, BuildingSlot slot) {
+        String houseType = slot.buildingName().toLowerCase();
+        HouseConfig config = HouseConfigLoader.getConfig(houseType);
+        if (config == null) return;
+
+        long uniqueSeed = level.getSeed() ^ slot.position().hashCode();
+        RandomSource random = RandomSource.create(uniqueSeed);
+
+        int houseDecor = config.houseDecorCount() > 0 ? random.nextInt(config.houseDecorCount()) : 0;
+        String houseNbt = houseType + "_" + houseDecor;
+
+        BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(slot.position(), config);
+        BlockPos housePlacementOrigin = HousePositionCalculator.calculatePlacementOrigin(
+                houseOrigin, slot.rotation(), config.size()[0], config.size()[2]
+        );
+
+        StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseNbt), slot.rotation(), false, false);
+    }
+
+    public static void placeHouseRoomsOnly(ServerLevel level, BuildingSlot slot, RandomSource random) {
+        String houseType = slot.buildingName().toLowerCase();
+        HouseConfig config = HouseConfigLoader.getConfig(houseType);
+        if (config == null) return;
+
+        long uniqueSeed = level.getSeed() ^ slot.position().hashCode();
+        RandomSource roomRandom = RandomSource.create(uniqueSeed);
+
+        BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(slot.position(), config);
+        int houseSizeX = config.size()[0];
+        int houseSizeZ = config.size()[2];
+
+        for (RoomSlot room : config.rooms()) {
+            placeAllFloorsForRoom(level, config, room, houseOrigin, slot.rotation(), roomRandom, houseSizeX, houseSizeZ);
+        }
+    }
+
 }
