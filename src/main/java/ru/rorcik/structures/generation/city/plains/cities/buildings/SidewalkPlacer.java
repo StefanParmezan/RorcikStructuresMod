@@ -35,7 +35,7 @@ public class SidewalkPlacer {
             slotMap.put(slot.position(), slot);
         }
 
-        Set<BlockPos> processedPairs = new HashSet<>();
+        Set<Long> processedPairs = new HashSet<>();
         int sidewalksAdded = 0;
         int skippedPark = 0;
         int skippedPlatform = 0;
@@ -75,7 +75,7 @@ public class SidewalkPlacer {
             if (processedPairs.contains(pairKey)) {
                 continue;
             }
-            processedPairs.add(BlockPos.of(pairKey));
+            processedPairs.add(pairKey);
 
             sidewalksAdded++;
             actions.add(() -> placeSidewalk(level, slot, random));

@@ -23,7 +23,7 @@ import java.util.Set;
 
 public class RoadDecorationsPlacer {
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final String[] DECOR_NAMES = {"a", "b", "c", "d", "e", "f", "g"};
+    public static final String[] DECOR_NAMES = {"a", "b", "c", "d", "e", "f", "g"};
 
     public static void collectDecorationActions(
             ServerLevel level,

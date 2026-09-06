@@ -5,13 +5,12 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.data.StructureCache;
-import ru.rorcik.structures.generation.GeneratorConfig;
-
 import java.util.Optional;
 
 public final class StructureUtils {
@@ -20,8 +19,9 @@ public final class StructureUtils {
     private static final int UPDATE_NEIGHBORS = 1;
     private static final int UPDATE_CLIENTS = 2;
     private static final int UPDATE_INVISIBLE = 4;
-    private static final int UPDATE_SUPPRESS_LIGHT = 8;
+    private static final int UPDATE_SUPPRESS_REDSTONE = 8;
     private static final int UPDATE_SKIP_DROPS = 16;
+    private static final int UPDATE_KNOWN_SHAPE = 64;
 
     private StructureUtils() {}
 
@@ -77,12 +77,11 @@ public final class StructureUtils {
 
         Optional<StructureTemplate> templateOpt = StructureCache.get(location);
         if (templateOpt.isEmpty()) {
-            LOGGER.error("[PLACE] Structure not available: {} — placement skipped", nbtPath);
+            LOGGER.warn("[PLACE] Structure not available in cache: {} (check preload logs)", nbtPath);
             return;
         }
 
         StructureTemplate template = templateOpt.get();
-
         StructurePlaceSettings settings = new StructurePlaceSettings()
                 .setRotation(rotation)
                 .setIgnoreEntities(false)
@@ -100,8 +99,13 @@ public final class StructureUtils {
         BlockPos size = new BlockPos(template.getSize());
         BlockPos pivot = pivotAtOrigin ? origin : origin.offset(size);
 
-        int placementFlags = UPDATE_CLIENTS | UPDATE_SUPPRESS_LIGHT;
+        int placementFlags = UPDATE_CLIENTS | UPDATE_SKIP_DROPS | UPDATE_KNOWN_SHAPE;
 
         template.placeInWorld(level, origin, pivot, settings, level.getRandom(), placementFlags);
+
+        if (level.hasChunkAt(origin)) {
+            LevelChunk chunk = level.getChunkAt(origin);
+            chunk.setUnsaved(true);
+        }
     }
 }

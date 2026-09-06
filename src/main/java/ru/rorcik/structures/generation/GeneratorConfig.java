@@ -27,10 +27,6 @@ public final class GeneratorConfig {
     public static final int MAX_STRUCTURES_PER_TICK = 64;
     public static final int CHUNKS_PER_TICK = 48;
 
-    public static final boolean UPDATE_LIGHTING = false;
-    public static final boolean UPDATE_NEIGHBORS = false;
-    public static final boolean PRECOMPILE_ALL_TEMPLATES = false;
-
     public static final int MIN_BUILDING_CACHE = 16;
     public static final int MAX_BUILDING_CACHE_LIMIT = 512;
 

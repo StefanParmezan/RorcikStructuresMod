@@ -34,6 +34,7 @@ public class StructureCache {
     private static int buildingCapacity = 0;
     private static int roomCapacity = 0;
     private static boolean initialized = false;
+    private static volatile boolean readOnly = false;
 
     private static long buildingTotalBytes = 0;
     private static int buildingFileCount = 0;
@@ -100,6 +101,11 @@ public class StructureCache {
 
     private static boolean isRoomPath(String path) {
         return path.contains(ROOMS_PATH_MARKER);
+    }
+
+    public static void setReadOnly(boolean value) {
+        readOnly = value;
+        LOGGER.debug("[CACHE] Read-only mode: {}", value);
     }
 
     public static long getAverageBuildingBytesInMemory() {
@@ -211,9 +217,9 @@ public class StructureCache {
         if (!initialized) {
             initializeCompiledCaches();
         }
-
         boolean isRoom = isRoomPath(location.getPath());
         Map<ResourceLocation, StructureTemplate> targetCache = isRoom ? ROOM_CACHE : BUILDING_CACHE;
+
         if (targetCache == null) {
             LOGGER.error("[CACHE] Cache not initialized for: {}", location);
             return Optional.empty();
@@ -226,9 +232,56 @@ public class StructureCache {
             return Optional.of(cached);
         }
 
+        if (readOnly) {
+            if (RorcikStructuresModConfig.logCacheMisses) {
+                LOGGER.warn("[CACHE] MISS in READ-ONLY mode: {} (Preloader failed to load this! Skipping placement.)", location);
+            }
+            return Optional.empty();
+        }
+
         if (isRoom) roomMisses.incrementAndGet();
         else buildingMisses.incrementAndGet();
+        return compileOnDemand(location, isRoom, targetCache);
+    }
 
+    public static void precompile(ResourceLocation location) {
+        if (!initialized) {
+            initializeCompiledCaches();
+        }
+
+        boolean isRoom = isRoomPath(location.getPath());
+        Map<ResourceLocation, StructureTemplate> targetCache = isRoom ? ROOM_CACHE : BUILDING_CACHE;
+
+        if (targetCache == null) return;
+
+        if (targetCache.containsKey(location)) return;
+
+        byte[] rawBytes = COMPRESSED_RAW_CACHE.get(location);
+        if (rawBytes == null) {
+            notFoundCount.incrementAndGet();
+            return;
+        }
+
+        if (blockGetter == null) {
+            LOGGER.error("[CACHE] Cannot precompile, blockGetter is null: {}", location);
+            return;
+        }
+
+        try {
+            CompoundTag nbt = NbtIo.readCompressed(new java.io.ByteArrayInputStream(rawBytes));
+            StructureTemplate template = new StructureTemplate();
+            template.load(blockGetter, nbt);
+
+            targetCache.put(location, template);
+        } catch (Exception e) {
+            LOGGER.error("[CACHE] Failed to precompile template in background: {}", location, e);
+        }
+    }
+
+    private static Optional<StructureTemplate> compileOnDemand(
+            ResourceLocation location, boolean isRoom,
+            Map<ResourceLocation, StructureTemplate> targetCache
+    ) {
         byte[] rawBytes = COMPRESSED_RAW_CACHE.get(location);
         if (rawBytes == null) {
             notFoundCount.incrementAndGet();
@@ -254,30 +307,6 @@ public class StructureCache {
             LOGGER.error("[CACHE] Failed to compile template on-demand: {}", location, e);
             return Optional.empty();
         }
-    }
-
-    public static void preloadTemplates(Collection<ResourceLocation> locations) {
-        if (BUILDING_CACHE == null || ROOM_CACHE == null) return;
-
-        int loadedBuildings = 0;
-        int loadedRooms = 0;
-        long startTime = System.currentTimeMillis();
-
-        for (ResourceLocation loc : locations) {
-            boolean isRoom = isRoomPath(loc.getPath());
-            Map<ResourceLocation, StructureTemplate> targetCache = isRoom ? ROOM_CACHE : BUILDING_CACHE;
-            int capacity = isRoom ? roomCapacity : buildingCapacity;
-            if (targetCache.size() >= capacity) continue;
-
-            if (get(loc).isPresent()) {
-                if (isRoom) loadedRooms++;
-                else loadedBuildings++;
-            }
-        }
-
-        long elapsed = System.currentTimeMillis() - startTime;
-        LOGGER.info("[CACHE] Preloaded {} buildings + {} rooms in {} ms",
-                loadedBuildings, loadedRooms, elapsed);
     }
 
     public static synchronized void unloadCompiledTemplates() {

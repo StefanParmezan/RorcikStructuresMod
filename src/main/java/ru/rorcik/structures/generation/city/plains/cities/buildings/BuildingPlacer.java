@@ -6,6 +6,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import ru.rorcik.structures.common.ModPaths;
 import ru.rorcik.structures.data.StructureCache;
@@ -22,12 +23,16 @@ import ru.rorcik.structures.generation.city.plains.houses.HousePositionCalculato
 import ru.rorcik.structures.generation.city.plains.houses.RoomPlacer;
 
 import java.util.Optional;
+import java.util.Set;
 
 public class BuildingPlacer {
     private static final HouseGenerator HOUSE_GENERATOR = new HouseGenerator();
     private static final int BUILDING_Y_OFFSET = -1;
     private static final String PLATFORM_CATEGORY = "platforms";
     private static final String PARKS_CATEGORY = "parks";
+    private static final StructurePlaceSettings SHARED_SETTINGS = new StructurePlaceSettings()
+            .setIgnoreEntities(false)
+            .setKnownShape(true);
 
     public static void placeBuilding(ServerLevel level, BuildingSlot slot) {
         if (slot.category().equals("houses")) {
@@ -41,34 +46,91 @@ public class BuildingPlacer {
         }
     }
 
-    public static void placeHouseShell(ServerLevel level, BuildingSlot slot) {
+    public static void placeCompleteHouse(ServerLevel level, BuildingSlot slot) {
         String houseType = slot.buildingName().toLowerCase();
         HouseConfig config = HouseConfigLoader.getConfig(houseType);
         if (config == null) return;
 
-        long uniqueSeed = level.getSeed() ^ slot.position().hashCode() ^ level.getRandom().nextLong();
+        long uniqueSeed = level.getSeed() ^ slot.position().hashCode();
         RandomSource random = RandomSource.create(uniqueSeed);
 
         int houseDecor = config.houseDecorCount() > 0 ? random.nextInt(config.houseDecorCount()) : 0;
         String houseNbt = houseType + "_" + houseDecor;
-
         BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(slot.position(), config);
         BlockPos housePlacementOrigin = HousePositionCalculator.calculatePlacementOrigin(
                 houseOrigin, slot.rotation(), config.size()[0], config.size()[2]
         );
-        StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseNbt), slot.rotation(), false, false);
+        StructureUtils.placeStructure(level, housePlacementOrigin,
+                ModPaths.houseNbtPath(houseNbt), slot.rotation(), false, false);
+
+        int houseSizeX = config.size()[0];
+        int houseSizeZ = config.size()[2];
+
+
+        for (RoomSlot room : config.rooms()) {
+            placeAllFloorsForRoom(level, config, room, houseOrigin, slot.rotation(),
+                    random, houseSizeX, houseSizeZ);
+        }
     }
 
-    public static void placeHouseRoom(ServerLevel level, BuildingSlot slot, RoomSlot room, int floorIndex) {
-        String houseType = slot.buildingName().toLowerCase();
-        HouseConfig config = HouseConfigLoader.getConfig(houseType);
-        if (config == null) return;
+    private static void placeAllFloorsForRoom(
+            ServerLevel level, HouseConfig config, RoomSlot room,
+            BlockPos houseOrigin, Rotation houseRotation, RandomSource random,
+            int houseSizeX, int houseSizeZ
+    ) {
 
-        long uniqueSeed = level.getSeed() ^ slot.position().hashCode() ^ floorIndex ^ level.getRandom().nextLong();
-        RandomSource random = RandomSource.create(uniqueSeed);
+        Rotation roomRotation = Rotation.values()[
+                ((room.rotation() + houseRotation.ordinal() * 90) % 360) / 90
+                ];
 
-        BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(slot.position(), config);
-        RoomPlacer.placeSingleRoom(level, config, room, houseOrigin, slot.rotation(), random, floorIndex);
+        int[] rotatedRoomPos = StructureUtils.rotatePositionInStructure(
+                room.position()[0], room.position()[1], room.position()[2],
+                houseRotation, houseSizeX, houseSizeZ
+        );
+
+        int[] rotatedRoomOffset = StructureUtils.rotateOffset(
+                room.offset()[0], room.offset()[1], room.offset()[2],
+                houseRotation
+        );
+
+
+        int baseY = config.firstFloorOffset() + rotatedRoomOffset[1];
+        int roomX = houseOrigin.getX() + rotatedRoomPos[0] + rotatedRoomOffset[0];
+        int roomZ = houseOrigin.getZ() + rotatedRoomPos[2] + rotatedRoomOffset[2];
+
+        String baseNbt = room.nbt();
+        String variant = room.variant();
+        boolean hasVariant = !variant.isEmpty();
+        boolean hasBaseDecors = !room.baseDecors().isEmpty();
+        Set<Integer> baseDecors = room.baseDecors();
+        int decorCount = room.decorCount();
+        boolean mirrorX = room.mirrorX();
+        boolean mirrorZ = room.mirrorZ();
+        int floorHeight = config.floorHeight();
+        String configType = config.type();
+
+
+        for (int i = 0; i < room.repeat(); i++) {
+            int floor = room.startFloor() + i;
+            int y = houseOrigin.getY() + baseY + floor * floorHeight;
+
+            int decor = decorCount > 0 ? random.nextInt(decorCount) : 0;
+            String roomNbt = resolveRoomNbtFast(baseNbt, variant,
+                    hasVariant, hasBaseDecors, baseDecors, decor);
+
+            BlockPos roomOrigin = new BlockPos(roomX, y, roomZ);
+            StructureUtils.placeStructure(level, roomOrigin,
+                    ModPaths.roomNbtPath(configType, roomNbt),
+                    roomRotation, mirrorX, mirrorZ);
+        }
+    }
+
+    private static String resolveRoomNbtFast(String baseName, String variant,
+                                             boolean hasVariant, boolean hasBaseDecors,
+                                             Set<Integer> baseDecors, int decor) {
+        if (hasVariant) return baseName + "_" + decor + "_" + variant;
+        if (hasBaseDecors && baseDecors.contains(decor)) return baseName + "_" + decor;
+        return baseName + "_" + decor + "_v";
     }
 
     private static void placePark(ServerLevel level, BuildingSlot slot) {

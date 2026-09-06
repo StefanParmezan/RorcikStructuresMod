@@ -21,7 +21,7 @@ import java.util.*;
 
 public class RoadNetworkGenerator {
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final int CHUNK_LOAD_RADIUS = 8;
+    private static final int CHUNK_LOAD_RADIUS = 4;
 
     public static void generateRoadNetwork(ServerLevel level, BlockPos origin, long seed, int maxSegments) {
         long uniqueSeed = seed ^ origin.hashCode() ^ System.nanoTime() ^ level.getRandom().nextLong();
@@ -70,7 +70,7 @@ public class RoadNetworkGenerator {
                     roadCount, buildingActions.size(), sidewalkActions.size(), allActions.size());
 
             CityBuildScheduler.scheduleBuildActions(allActions);
-        });
+        });;
     }
 
     private static Set<ResourceLocation> collectRoadTemplates(Map<BlockPos, RoadNode> nodeMap) {
@@ -100,7 +100,15 @@ public class RoadNetworkGenerator {
             }
         }
 
-        LOGGER.info("[ROAD-PRELOAD] Collected {} road templates for types: {}", templates.size(), usedRoadTypes);
+        for (String decorName : RoadDecorationsPlacer.DECOR_NAMES) {
+            ResourceLocation loc = ResourceLocation.tryParse(ModPaths.roadDecorNbtPath(decorName));
+            if (loc != null) {
+                templates.add(loc);
+            }
+        }
+
+        LOGGER.info("[ROAD-PRELOAD] Collected {} road + decor templates for types: {}",
+                templates.size(), usedRoadTypes);
         return templates;
     }
 

@@ -59,28 +59,23 @@ public class BuildingGenerator implements IStructureGenerator {
         List<Runnable> actions = new ArrayList<>();
 
         for (BuildingSlot slot : slots) {
-            if (slot.category().equals("parks")) {
-                parkCount++;
-                actions.add(() -> BuildingPlacer.placeBuilding(level, slot));
-            } else if (slot.category().equals("platforms")) {
-                platformCount++;
-                actions.add(() -> BuildingPlacer.placeBuilding(level, slot));
-            } else if (slot.category().equals("houses")) {
-                buildingCount++;
-                actions.add(() -> BuildingPlacer.placeHouseShell(level, slot));
-
-                HouseConfig config = HouseConfigLoader.getConfig(slot.buildingName().toLowerCase());
-                if (config != null) {
-                    for (RoomSlot room : config.rooms()) {
-                        for (int i = 0; i < room.repeat(); i++) {
-                            final int floorIndex = room.startFloor() + i;
-                            actions.add(() -> BuildingPlacer.placeHouseRoom(level, slot, room, floorIndex));
-                        }
-                    }
+            switch (slot.category()) {
+                case "parks" -> {
+                    parkCount++;
+                    actions.add(() -> BuildingPlacer.placeBuilding(level, slot));
                 }
-            } else {
-                buildingCount++;
-                actions.add(() -> BuildingPlacer.placeBuilding(level, slot));
+                case "platforms" -> {
+                    platformCount++;
+                    actions.add(() -> BuildingPlacer.placeBuilding(level, slot));
+                }
+                case "houses" -> {
+                    buildingCount++;
+                    actions.add(() -> BuildingPlacer.placeCompleteHouse(level, slot));
+                }
+                default -> {
+                    buildingCount++;
+                    actions.add(() -> BuildingPlacer.placeBuilding(level, slot));
+                }
             }
         }
 
@@ -104,12 +99,19 @@ public class BuildingGenerator implements IStructureGenerator {
                     for (int decor = 0; decor < Math.max(1, config.houseDecorCount()); decor++) {
                         addTemplate(templates, ModPaths.houseNbtPath(houseType + "_" + decor));
                     }
+
                     for (RoomSlot room : config.rooms()) {
-                        for (int decor = 0; decor < Math.max(1, room.decorCount()); decor++) {
-                            String roomNbt = room.variant().isEmpty()
-                                    ? room.nbt() + "_" + decor
-                                    : room.nbt() + "_" + decor + "_" + room.variant();
-                            addTemplate(templates, ModPaths.roomNbtPath(config.type(), roomNbt));
+                        int maxDecor = Math.max(1, room.decorCount());
+                        for (int decor = 0; decor < maxDecor; decor++) {
+                            if (!room.variant().isEmpty()) {
+                                addTemplate(templates, ModPaths.roomNbtPath(config.type(), room.nbt() + "_" + decor + "_" + room.variant()));
+                            }
+                            else if (room.baseDecors().contains(decor)) {
+                                addTemplate(templates, ModPaths.roomNbtPath(config.type(), room.nbt() + "_" + decor));
+                            }
+                            else {
+                                addTemplate(templates, ModPaths.roomNbtPath(config.type(), room.nbt() + "_" + decor + "_v"));
+                            }
                         }
                     }
                 }
@@ -133,7 +135,6 @@ public class BuildingGenerator implements IStructureGenerator {
             }
         }
         usedRoadTypes.add("s");
-
         for (String roadType : usedRoadTypes) {
             RoadConfig config = RoadConfigLoader.getConfig(roadType);
             if (config != null) {
