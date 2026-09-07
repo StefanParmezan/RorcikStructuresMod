@@ -7,7 +7,7 @@ modId="rorcik_structures"
 version="1.0.0"
 displayName="Rorcik Structures"
 authors="Rorcik, StefanParmezan"
-description='''Structures generation mod, wroted for "The Last Dawn" modpack'''
+description='''A structure generation mod written for The Last Dawn modpack.'''
 
 [[dependencies.rorcik_structures]]
 modId="forge"

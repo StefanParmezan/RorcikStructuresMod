@@ -6,7 +6,6 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Rotation;
@@ -21,10 +20,11 @@ import ru.rorcik.structures.generation.city.plains.cities.buildings.ParkPlacer;
 import ru.rorcik.structures.generation.city.plains.cities.roads.RoadDecorationsPlacer;
 import ru.rorcik.structures.generation.city.plains.houses.HouseGenerator;
 import ru.rorcik.structures.generation.city.plains.cities.roads.RoadPlacer;
+import ru.rorcik.structures.generation.city.desert.DesertCityGenerator;
 
 @Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ModCommands {
-    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     public static void register() {
     }
@@ -32,7 +32,6 @@ public class ModCommands {
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
-
         registerHouseCommands(dispatcher);
         registerRoadCommands(dispatcher);
         registerCityCommands(dispatcher);
@@ -47,13 +46,9 @@ public class ModCommands {
                                     String type = StringArgumentType.getString(ctx, "type");
                                     ServerLevel level = ctx.getSource().getLevel();
                                     BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
-
                                     LOGGER.info("Generating house type: {} with random decor", type);
-
                                     HouseGenerator.generateHouse(level, pos, type, Rotation.NONE);
-
-                                    ctx.getSource().sendSuccess(() ->
-                                            Component.literal("Generating house type " + type + " at " + pos.toShortString()), true);
+                                    ctx.getSource().sendSuccess(() -> Component.literal("Generating house type " + type + " at " + pos.toShortString()), true);
                                     return 1;
                                 })
                                 .then(Commands.argument("rotation", IntegerArgumentType.integer(0, 3))
@@ -63,14 +58,9 @@ public class ModCommands {
                                             Rotation rotation = Rotation.values()[rotValue];
                                             ServerLevel level = ctx.getSource().getLevel();
                                             BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
-
-                                            LOGGER.info("Generating house type: {} with rotation: {} degrees and random decor",
-                                                    type, rotValue * 90);
-
+                                            LOGGER.info("Generating house type: {} with rotation: {} degrees and random decor", type, rotValue * 90);
                                             HouseGenerator.generateHouse(level, pos, type, rotation);
-
-                                            ctx.getSource().sendSuccess(() ->
-                                                    Component.literal("Generating house type " + type + " with rotation " + (rotValue * 90) + " degrees"), true);
+                                            ctx.getSource().sendSuccess(() -> Component.literal("Generating house type " + type + " with rotation " + (rotValue * 90) + " degrees"), true);
                                             return 1;
                                         })
                                         .then(Commands.argument("decor", IntegerArgumentType.integer(0))
@@ -81,21 +71,15 @@ public class ModCommands {
                                                     Rotation rotation = Rotation.values()[rotValue];
                                                     ServerLevel level = ctx.getSource().getLevel();
                                                     BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
-
-                                                    LOGGER.info("Generating house type: {} with rotation: {} degrees and forced decor: {}",
-                                                            type, rotValue * 90, decor);
-
+                                                    LOGGER.info("Generating house type: {} with rotation: {} degrees and forced decor: {}", type, rotValue * 90, decor);
                                                     HouseGenerator.generateHouse(level, pos, type, rotation, decor);
-
-                                                    ctx.getSource().sendSuccess(() ->
-                                                            Component.literal("Generating house type " + type + " with rotation " + (rotValue * 90) + " degrees and decor " + decor), true);
+                                                    ctx.getSource().sendSuccess(() -> Component.literal("Generating house type " + type + " with rotation " + (rotValue * 90) + " degrees and decor " + decor), true);
                                                     return 1;
                                                 })
                                         )
                                 )
                         )
         );
-
         dispatcher.register(
                 Commands.literal("testrooms")
                         .then(Commands.argument("type", StringArgumentType.word())
@@ -103,13 +87,9 @@ public class ModCommands {
                                     String type = StringArgumentType.getString(ctx, "type");
                                     ServerLevel level = ctx.getSource().getLevel();
                                     BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
-
                                     LOGGER.info("Generating rooms only for house type: {}", type);
-
                                     HouseGenerator.generateRoomsOnly(level, pos, type, Rotation.NONE);
-
-                                    ctx.getSource().sendSuccess(() ->
-                                            Component.literal("Generating rooms only for house type " + type + " at " + pos.toShortString()), true);
+                                    ctx.getSource().sendSuccess(() -> Component.literal("Generating rooms only for house type " + type + " at " + pos.toShortString()), true);
                                     return 1;
                                 })
                                 .then(Commands.argument("rotation", IntegerArgumentType.integer(0, 3))
@@ -119,14 +99,9 @@ public class ModCommands {
                                             Rotation rotation = Rotation.values()[rotValue];
                                             ServerLevel level = ctx.getSource().getLevel();
                                             BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
-
-                                            LOGGER.info("Generating rooms only for house type: {} with rotation: {} degrees",
-                                                    type, rotValue * 90);
-
+                                            LOGGER.info("Generating rooms only for house type: {} with rotation: {} degrees", type, rotValue * 90);
                                             HouseGenerator.generateRoomsOnly(level, pos, type, rotation);
-
-                                            ctx.getSource().sendSuccess(() ->
-                                                    Component.literal("Generating rooms only for house type " + type + " with rotation " + (rotValue * 90) + " degrees"), true);
+                                            ctx.getSource().sendSuccess(() -> Component.literal("Generating rooms only for house type " + type + " with rotation " + (rotValue * 90) + " degrees"), true);
                                             return 1;
                                         })
                                 )
@@ -143,13 +118,9 @@ public class ModCommands {
                                     ServerLevel level = ctx.getSource().getLevel();
                                     BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
                                     Rotation rotation = Rotation.NONE;
-
                                     LOGGER.info("Generating road type: {} with default rotation (NONE)", type);
-
                                     RoadPlacer.generateSingleRoad(level, pos, type, rotation, -1);
-
-                                    ctx.getSource().sendSuccess(() ->
-                                            Component.literal("Generating road type " + type + " at " + pos.toShortString()), true);
+                                    ctx.getSource().sendSuccess(() -> Component.literal("Generating road type " + type + " at " + pos.toShortString()), true);
                                     return 1;
                                 })
                                 .then(Commands.argument("rotation", IntegerArgumentType.integer(0, 3))
@@ -159,13 +130,9 @@ public class ModCommands {
                                             Rotation rotation = Rotation.values()[rotValue];
                                             ServerLevel level = ctx.getSource().getLevel();
                                             BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
-
                                             LOGGER.info("Generating road type: {} with rotation: {} degrees", type, rotValue * 90);
-
                                             RoadPlacer.generateSingleRoad(level, pos, type, rotation, -1);
-
-                                            ctx.getSource().sendSuccess(() ->
-                                                    Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees"), true);
+                                            ctx.getSource().sendSuccess(() -> Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees"), true);
                                             return 1;
                                         })
                                         .then(Commands.argument("decor", IntegerArgumentType.integer(0))
@@ -176,14 +143,9 @@ public class ModCommands {
                                                     Rotation rotation = Rotation.values()[rotValue];
                                                     ServerLevel level = ctx.getSource().getLevel();
                                                     BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
-
-                                                    LOGGER.info("Generating road type: {} with rotation: {} degrees and forced decor: {}",
-                                                            type, rotValue * 90, decor);
-
+                                                    LOGGER.info("Generating road type: {} with rotation: {} degrees and forced decor: {}", type, rotValue * 90, decor);
                                                     RoadPlacer.generateSingleRoad(level, pos, type, rotation, decor);
-
-                                                    ctx.getSource().sendSuccess(() ->
-                                                            Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees and decor " + decor), true);
+                                                    ctx.getSource().sendSuccess(() -> Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees and decor " + decor), true);
                                                     return 1;
                                                 })
                                                 .then(Commands.literal("withdecor")
@@ -194,17 +156,12 @@ public class ModCommands {
                                                             Rotation rotation = Rotation.values()[rotValue];
                                                             ServerLevel level = ctx.getSource().getLevel();
                                                             BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
-
-                                                            LOGGER.info("Generating road type: {} with rotation: {} degrees, decor: {} and road decorations",
-                                                                    type, rotValue * 90, decor);
-
+                                                            LOGGER.info("Generating road type: {} with rotation: {} degrees, decor: {} and road decorations", type, rotValue * 90, decor);
                                                             RoadSegment segment = RoadPlacer.generateSingleRoad(level, pos, type, rotation, decor);
                                                             if (segment != null) {
                                                                 RoadDecorationsPlacer.placeDecorationsForSingleRoad(level, segment, level.getRandom());
                                                             }
-
-                                                            ctx.getSource().sendSuccess(() ->
-                                                                    Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees, decor " + decor + " and decorations"), true);
+                                                            ctx.getSource().sendSuccess(() -> Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees and decor " + decor + " and decorations"), true);
                                                             return 1;
                                                         })
                                                 )
@@ -216,17 +173,12 @@ public class ModCommands {
                                                     Rotation rotation = Rotation.values()[rotValue];
                                                     ServerLevel level = ctx.getSource().getLevel();
                                                     BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
-
-                                                    LOGGER.info("Generating road type: {} with rotation: {} degrees and road decorations",
-                                                            type, rotValue * 90);
-
+                                                    LOGGER.info("Generating road type: {} with rotation: {} degrees and road decorations", type, rotValue * 90);
                                                     RoadSegment segment = RoadPlacer.generateSingleRoad(level, pos, type, rotation, -1);
                                                     if (segment != null) {
                                                         RoadDecorationsPlacer.placeDecorationsForSingleRoad(level, segment, level.getRandom());
                                                     }
-
-                                                    ctx.getSource().sendSuccess(() ->
-                                                            Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees and decorations"), true);
+                                                    ctx.getSource().sendSuccess(() -> Component.literal("Generating road type " + type + " with rotation " + (rotValue * 90) + " degrees and decorations"), true);
                                                     return 1;
                                                 })
                                         )
@@ -238,19 +190,30 @@ public class ModCommands {
     private static void registerCityCommands(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(
                 Commands.literal("testcity")
-                        .executes(ctx -> {
-                            ServerLevel level = ctx.getSource().getLevel();
-                            BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
-                            long seed = level.getSeed();
+                        .then(Commands.argument("type", StringArgumentType.word())
+                                .suggests((ctx, builder) -> {
+                                    builder.suggest("plains");
+                                    builder.suggest("desert");
+                                    return builder.buildFuture();
+                                })
+                                .executes(ctx -> {
+                                    String type = StringArgumentType.getString(ctx, "type");
+                                    ServerLevel level = ctx.getSource().getLevel();
+                                    BlockPos pos = BlockPos.containing(ctx.getSource().getPosition());
+                                    long seed = level.getSeed();
 
-                            LOGGER.info("Generating city at {}", pos.toShortString());
-
-                            CityGenerator.generateCity(level, pos, seed);
-
-                            ctx.getSource().sendSuccess(() ->
-                                    Component.literal("Generating city at " + pos.toShortString()), true);
-                            return 1;
-                        })
+                                    if ("desert".equalsIgnoreCase(type)) {
+                                        LOGGER.info("Generating desert city at {}", pos.toShortString());
+                                        DesertCityGenerator.generateCity(level, pos, seed);
+                                        ctx.getSource().sendSuccess(() -> Component.literal("Generating desert city at " + pos.toShortString()), true);
+                                    } else {
+                                        LOGGER.info("Generating plains city at {}", pos.toShortString());
+                                        CityGenerator.generateCity(level, pos, seed);
+                                        ctx.getSource().sendSuccess(() -> Component.literal("Generating plains city at " + pos.toShortString()), true);
+                                    }
+                                    return 1;
+                                })
+                        )
         );
     }
 
@@ -265,15 +228,9 @@ public class ModCommands {
                                             Rotation rotation = Rotation.values()[rotValue];
                                             ServerLevel level = ctx.getSource().getLevel();
                                             BlockPos playerPos = BlockPos.containing(ctx.getSource().getPosition());
-
-                                            LOGGER.info("Test park '{}' rotation={} ({}°) at player {}",
-                                                    name, rotation, rotValue * 90, playerPos.toShortString());
-
+                                            LOGGER.info("Test park '{}' rotation={} ({}°) at player {}", name, rotation, rotValue * 90, playerPos.toShortString());
                                             ParkPlacer.testPlacePark(level, playerPos, name, rotation);
-
-                                            ctx.getSource().sendSuccess(() ->
-                                                    Component.literal("Test park '" + name + "' rotation=" + rotation +
-                                                            " (" + (rotValue * 90) + "°) — first slot at player pos"), true);
+                                            ctx.getSource().sendSuccess(() -> Component.literal("Test park '" + name + "' rotation=" + rotation + " (" + (rotValue * 90) + "°) — first slot at player pos"), true);
                                             return 1;
                                         })
                                 )
