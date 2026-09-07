@@ -5,12 +5,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class ParkWorldTracker extends SavedData {
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
     private static final String DATA_NAME = "rorcik_park_counts";
 
     private final Map<String, Integer> parkCounts = new HashMap<>();

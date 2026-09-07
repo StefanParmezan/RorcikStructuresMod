@@ -10,6 +10,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.city.plains.config_loaders.ParkConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.ParkConfig;
@@ -23,7 +24,7 @@ import java.util.Optional;
 import java.util.Set;
 
 public class ParkPlacer {
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
 
     public static Rotation calculateRotationForSide(Direction side) {
         Direction facing = side.getOpposite();
@@ -113,10 +114,8 @@ public class ParkPlacer {
         return rectParks;
     }
 
-    public static List<ParkConfig> filterAvailableParks(ServerLevel level, List<ParkConfig> allParks) {
+    public static List<ParkConfig> filterAvailableParks(ServerLevel level, List<ParkConfig> allParks, ParkWorldTracker tracker) {
         List<ParkConfig> filtered = filterParks(allParks);
-        ParkWorldTracker tracker = ParkWorldTracker.get(level);
-
         List<ParkConfig> available = new ArrayList<>();
         for (ParkConfig park : filtered) {
             int currentCount = tracker.getCount(park.name());
@@ -127,7 +126,6 @@ public class ParkPlacer {
                         park.name(), currentCount, park.worldCount());
             }
         }
-
         return available;
     }
 

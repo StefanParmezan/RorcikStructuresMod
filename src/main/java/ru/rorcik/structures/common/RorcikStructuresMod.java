@@ -12,7 +12,7 @@ import org.slf4j.Logger;
 @Mod(RorcikStructuresMod.MODID)
 public class RorcikStructuresMod {
     public static final String MODID = "rorcik_structures";
-    private static final Logger LOGGER = LogUtils.getLogger();
+    public static final Logger LOGGER = LogUtils.getLogger();
 
     public RorcikStructuresMod(FMLJavaModLoadingContext context) {
         IEventBus modEventBus = context.getModEventBus();

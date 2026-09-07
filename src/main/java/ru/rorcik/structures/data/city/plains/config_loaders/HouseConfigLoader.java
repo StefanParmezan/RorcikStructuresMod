@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.api.IConfigLoader;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.city.plains.containers.HouseConfig;
 import ru.rorcik.structures.data.city.plains.containers.RoomSlot;
 
@@ -23,7 +24,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class HouseConfigLoader implements IConfigLoader {
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
     private static final Gson GSON = new GsonBuilder().create();
     private static final Map<String, HouseConfig> CONFIGS = new HashMap<>();
 

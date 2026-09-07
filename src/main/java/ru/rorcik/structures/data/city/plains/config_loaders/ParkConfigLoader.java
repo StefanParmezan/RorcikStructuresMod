@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.api.IConfigLoader;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.city.plains.containers.ParkConfig;
 
 import java.io.InputStream;
@@ -17,7 +18,7 @@ import java.util.Collections;
 import java.util.List;
 
 public class ParkConfigLoader implements IConfigLoader {
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
     private static final Gson GSON = new GsonBuilder().create();
     private static final List<ParkConfig> PARKS = new ArrayList<>();
     private static final int DEFAULT_WORLD_COUNT = -1;

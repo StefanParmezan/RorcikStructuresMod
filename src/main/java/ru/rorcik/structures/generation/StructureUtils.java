@@ -10,16 +10,14 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlac
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.StructureCache;
 import java.util.Optional;
 
 public final class StructureUtils {
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
 
-    private static final int UPDATE_NEIGHBORS = 1;
     private static final int UPDATE_CLIENTS = 2;
-    private static final int UPDATE_INVISIBLE = 4;
-    private static final int UPDATE_SUPPRESS_REDSTONE = 8;
     private static final int UPDATE_SKIP_DROPS = 16;
     private static final int UPDATE_KNOWN_SHAPE = 64;
 

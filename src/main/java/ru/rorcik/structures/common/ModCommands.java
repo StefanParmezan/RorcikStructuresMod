@@ -24,7 +24,7 @@ import ru.rorcik.structures.generation.city.plains.cities.roads.RoadPlacer;
 
 @Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ModCommands {
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
 
     public static void register() {
     }

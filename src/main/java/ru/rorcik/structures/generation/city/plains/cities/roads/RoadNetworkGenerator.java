@@ -9,6 +9,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Rotation;
 import org.slf4j.Logger;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.*;
@@ -16,15 +17,17 @@ import ru.rorcik.structures.generation.GeneratorConfig;
 import ru.rorcik.structures.generation.city.plains.cities.CityBuildScheduler;
 import ru.rorcik.structures.generation.city.plains.cities.buildings.BuildingGenerator;
 import ru.rorcik.structures.generation.city.plains.cities.buildings.BuildingSlotAllocator;
+import ru.rorcik.structures.generation.city.plains.cities.buildings.ParkWorldTracker;
 import ru.rorcik.structures.generation.city.plains.cities.buildings.SidewalkPlacer;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 public class RoadNetworkGenerator {
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
     private static final int CHUNK_LOAD_RADIUS = 4;
 
-    public static void generateRoadNetwork(ServerLevel level, BlockPos origin, long seed, int maxSegments) {
+    public static void generateRoadNetwork(ServerLevel level, BlockPos origin, long seed) {
         long uniqueSeed = seed ^ origin.hashCode() ^ System.nanoTime() ^ level.getRandom().nextLong();
         RandomSource random = RandomSource.create(uniqueSeed);
 
@@ -37,45 +40,61 @@ public class RoadNetworkGenerator {
         LOGGER.info("Graph built: {} nodes, {} straights, {} chunks needed",
                 nodeMap.size(), straightPositions.size(), chunkKeys.size());
 
-        RoadNetwork network = new RoadNetwork();
-        List<CityBuildScheduler.GenerationPhase> phases = new ArrayList<>();
+        ParkWorldTracker tracker = ParkWorldTracker.get(level);
 
-        List<Runnable> roadActions = new ArrayList<>();
-        collectRoadActions(level, network, random, root, new HashSet<>(), roadActions);
-        phases.add(new CityBuildScheduler.GenerationPhase(
-                "Roads & Decorations",
-                collectRoadTemplates(nodeMap),
-                roadActions,
-                StructureCache.Category.ROADS
-        ));
+        CompletableFuture<List<BuildingSlot>> allocationFuture = CompletableFuture.supplyAsync(
+                () -> BuildingSlotAllocator.allocateSlots(level, nodeMap, straightPositions, new HashSet<>(), random, tracker),
+                CityBuildScheduler.getBackgroundExecutor()
+        );
 
-        List<BuildingSlot> slots = BuildingSlotAllocator.allocateSlots(level, nodeMap, straightPositions, new HashSet<>(), random);
+        CityBuildScheduler.scheduleChunkLoading(chunkKeys, () -> {
+            CityBuildScheduler.scheduleBackgroundTask(allocationFuture, () -> {
+                LOGGER.info("Chunks ready and allocation complete, building city...");
+                List<BuildingSlot> slots = allocationFuture.join();
 
-        List<Runnable> buildingActions = BuildingGenerator.collectBuildActions(level, slots);
-        phases.add(new CityBuildScheduler.GenerationPhase(
-                "Buildings & Platforms",
-                BuildingGenerator.collectRequiredBuildTemplates(slots),
-                buildingActions,
-                StructureCache.Category.BUILDINGS
-        ));
+                List<CityBuildScheduler.GenerationPhase> phases = new ArrayList<>();
 
-        List<Runnable> roomActions = BuildingGenerator.collectRoomPlacementActions(level, slots, random);
-        phases.add(new CityBuildScheduler.GenerationPhase(
-                "Rooms (Interiors)",
-                BuildingGenerator.collectRequiredRoomTemplates(slots),
-                roomActions,
-                StructureCache.Category.ROOMS
-        ));
+                Set<ResourceLocation> roadTemplates = collectRoadTemplates(nodeMap);
+                List<Runnable> roadActions = new ArrayList<>();
+                RoadNetwork network = new RoadNetwork();
+                collectRoadActions(level, network, random, root, new HashSet<>(), roadActions);
+                phases.add(new CityBuildScheduler.GenerationPhase(
+                        "Roads & Decorations",
+                        roadTemplates,
+                        roadActions,
+                        StructureCache.Category.ROADS
+                ));
 
-        List<Runnable> sidewalkActions = SidewalkPlacer.collectSidewalkActions(slots, level, random);
-        phases.add(new CityBuildScheduler.GenerationPhase(
-                "Sidewalks",
-                SidewalkPlacer.collectRequiredTemplates(),
-                sidewalkActions,
-                StructureCache.Category.SIDEWALKS
-        ));
+                Set<ResourceLocation> buildingTemplates = BuildingGenerator.collectRequiredBuildTemplates(slots);
+                List<Runnable> buildingActions = BuildingGenerator.collectBuildActions(level, slots);
+                phases.add(new CityBuildScheduler.GenerationPhase(
+                        "Buildings & Platforms",
+                        buildingTemplates,
+                        buildingActions,
+                        StructureCache.Category.HOUSES
+                ));
 
-        CityBuildScheduler.startPhasedGeneration(chunkKeys, phases);
+                Set<ResourceLocation> roomTemplates = BuildingGenerator.collectRequiredRoomTemplates(slots);
+                List<Runnable> roomActions = BuildingGenerator.collectRoomPlacementActions(level, slots, random);
+                phases.add(new CityBuildScheduler.GenerationPhase(
+                        "Rooms (Interiors)",
+                        roomTemplates,
+                        roomActions,
+                        StructureCache.Category.ROOMS
+                ));
+
+                Set<ResourceLocation> sidewalkTemplates = SidewalkPlacer.collectRequiredTemplates();
+                List<Runnable> sidewalkActions = SidewalkPlacer.collectSidewalkActions(slots, level, random);
+                phases.add(new CityBuildScheduler.GenerationPhase(
+                        "Sidewalks",
+                        sidewalkTemplates,
+                        sidewalkActions,
+                        StructureCache.Category.SIDEWALKS
+                ));
+
+                CityBuildScheduler.startPhasedGeneration(chunkKeys, phases);
+            });
+        });
     }
 
     private static Set<ResourceLocation> collectRoadTemplates(Map<BlockPos, RoadNode> nodeMap) {
@@ -153,8 +172,26 @@ public class RoadNetworkGenerator {
                 BlockPos straightPos = currentPos;
                 if (!network.hasSegmentAt(straightPos)) {
                     actions.add(() -> {
-                        RoadSegment segment = RoadPlacer.createAndPlaceRoad(level, network, "s", straightPos, sRotation, random);
+                        String roadTypeToPlace = "s";
+                        int forcedDecor = -1;
+
+                        RoadConfig sConfig = RoadConfigLoader.getConfig("s");
+                        if (sConfig != null && !sConfig.stopVariants().isEmpty()) {
+                            if (network.getAvailableStopVariants().isEmpty()) {
+                                network.initStopVariants(sConfig.stopVariants());
+                            }
+
+                            if (network.getStraightRoadCount() >= 2) {
+                                Integer stopVariant = network.pollStopVariant();
+                                if (stopVariant != null) {
+                                    forcedDecor = stopVariant;
+                                }
+                            }
+                        }
+
+                        RoadSegment segment = RoadPlacer.createAndPlaceRoad(level, network, roadTypeToPlace, straightPos, sRotation, random, forcedDecor);
                         if (segment != null) {
+                            network.incrementStraightRoadCount();
                             RoadDecorationsPlacer.placeDecorationsForSingleRoad(level, segment, random);
                         }
                     });
@@ -168,19 +205,19 @@ public class RoadNetworkGenerator {
     private static Set<Long> collectChunkKeys(Set<BlockPos> nodePositions, Set<BlockPos> straightPositions) {
         Set<Long> chunkKeys = new HashSet<>();
         for (BlockPos pos : nodePositions) {
-            addChunksInRadius(pos, CHUNK_LOAD_RADIUS, chunkKeys);
+            addChunksInRadius(pos, chunkKeys);
         }
         for (BlockPos pos : straightPositions) {
-            addChunksInRadius(pos, CHUNK_LOAD_RADIUS, chunkKeys);
+            addChunksInRadius(pos, chunkKeys);
         }
         return chunkKeys;
     }
 
-    private static void addChunksInRadius(BlockPos pos, int radiusChunks, Set<Long> chunkKeys) {
+    private static void addChunksInRadius(BlockPos pos, Set<Long> chunkKeys) {
         int baseChunkX = pos.getX() >> 4;
         int baseChunkZ = pos.getZ() >> 4;
-        for (int dx = -radiusChunks; dx <= radiusChunks; dx++) {
-            for (int dz = -radiusChunks; dz <= radiusChunks; dz++) {
+        for (int dx = -RoadNetworkGenerator.CHUNK_LOAD_RADIUS; dx <= RoadNetworkGenerator.CHUNK_LOAD_RADIUS; dx++) {
+            for (int dz = -RoadNetworkGenerator.CHUNK_LOAD_RADIUS; dz <= RoadNetworkGenerator.CHUNK_LOAD_RADIUS; dz++) {
                 long key = ((long) (baseChunkX + dx) << 32) | ((baseChunkZ + dz) & 0xFFFFFFFFL);
                 chunkKeys.add(key);
             }

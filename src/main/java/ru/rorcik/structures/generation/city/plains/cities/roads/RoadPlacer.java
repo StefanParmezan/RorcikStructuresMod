@@ -8,6 +8,7 @@ import net.minecraft.world.level.block.Rotation;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.city.plains.containers.RoadConfig;
 import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
@@ -17,7 +18,7 @@ import ru.rorcik.structures.generation.StructureUtils;
 import java.util.List;
 
 public class RoadPlacer {
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
 
     static Direction guessDirection(BlockPos from, BlockPos to) {
         int dx = to.getX() - from.getX();
@@ -35,22 +36,26 @@ public class RoadPlacer {
             String type,
             BlockPos position,
             Rotation rotation,
-            RandomSource random
+            RandomSource random,
+            int forcedDecor
     ) {
         RoadConfig config = RoadConfigLoader.getConfig(type);
         if (config == null) {
-            LOGGER.error("Road config '{}' not found", type);
             return null;
         }
-
         if (network.hasSegmentAt(position)) {
             return null;
         }
 
         int decorCount = config.decorCount();
-        int decor = decorCount > 0 ? random.nextInt(decorCount) : 0;
-        List<Direction> connections = RoadNetwork.getRotatedConnections(config, rotation);
+        int decor;
+        if (forcedDecor >= 0 && forcedDecor < decorCount) {
+            decor = forcedDecor;
+        } else {
+            decor = decorCount > 0 ? random.nextInt(decorCount) : 0;
+        }
 
+        List<Direction> connections = RoadNetwork.getRotatedConnections(config, rotation);
         RoadSegment segment = new RoadSegment(type, position, rotation, decor, connections);
 
         if (!network.addSegment(segment)) {
@@ -59,6 +64,17 @@ public class RoadPlacer {
 
         placeRoad(level, segment, config);
         return segment;
+    }
+
+    public static RoadSegment createAndPlaceRoad(
+            ServerLevel level,
+            RoadNetwork network,
+            String type,
+            BlockPos position,
+            Rotation rotation,
+            RandomSource random
+    ) {
+        return createAndPlaceRoad(level, network, type, position, rotation, random, -1);
     }
 
     static void placeRoad(ServerLevel level, RoadSegment segment, RoadConfig config) {

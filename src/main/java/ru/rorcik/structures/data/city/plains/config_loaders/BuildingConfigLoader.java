@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.api.IConfigLoader;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 public class BuildingConfigLoader implements IConfigLoader {
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
     private static final Map<String, List<String>> BUILDING_REGISTRY = new HashMap<>();
 
     public static void loadConfigs(ResourceManager resourceManager) {

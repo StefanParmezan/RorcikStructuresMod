@@ -27,8 +27,7 @@ public class StructureCache {
         ROOMS, HOUSES, ROADS, BUILDINGS, PARKS, SIDEWALKS, ROAD_DECOR, UNKNOWN
     }
 
-    private static final Logger LOGGER = LogUtils.getLogger();
-    private static final double DECOMPRESSION_FACTOR = GeneratorConfig.DEFAULT_DECOMPRESSION_FACTOR;
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
     private static Map<ResourceLocation, byte[]> COMPRESSED_RAW_CACHE = Collections.emptyMap();
     private static HolderGetter<Block> blockGetter = null;
     private static final Map<Category, Map<ResourceLocation, StructureTemplate>> CATEGORY_CACHES = new EnumMap<>(Category.class);

@@ -10,6 +10,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.city.plains.containers.BuildingSlot;
 import ru.rorcik.structures.generation.GeneratorConfig;
@@ -18,7 +19,7 @@ import ru.rorcik.structures.generation.StructureUtils;
 import java.util.*;
 
 public class SidewalkPlacer {
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
     private static final String[] SIDEWALK_NAMES = {"a", "b", "c", "d", "e", "f", "g"};
     private static final String PARKS_CATEGORY = "parks";
     private static final String PLATFORM_CATEGORY = "platforms";
@@ -165,8 +166,8 @@ public class SidewalkPlacer {
         };
     }
 
-    public static List<ResourceLocation> collectRequiredTemplates() {
-        List<ResourceLocation> templates = new ArrayList<>();
+    public static Set<ResourceLocation> collectRequiredTemplates() {
+        Set<ResourceLocation> templates = new HashSet<>();
         for (String name : SIDEWALK_NAMES) {
             ResourceLocation loc = ResourceLocation.tryParse(ModPaths.sidewalkNbtPath(name));
             if (loc != null) {

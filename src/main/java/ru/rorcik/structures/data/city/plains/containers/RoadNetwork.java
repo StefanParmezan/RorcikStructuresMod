@@ -3,7 +3,6 @@ package ru.rorcik.structures.data.city.plains.containers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Rotation;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -14,6 +13,9 @@ import java.util.stream.Collectors;
 public class RoadNetwork {
     private final List<RoadSegment> segments = new ArrayList<>();
     private final Map<BlockPos, RoadSegment> segmentMap = new HashMap<>();
+
+    private int straightRoadCount = 0;
+    private List<Integer> availableStopVariants = new ArrayList<>();
 
     public boolean addSegment(RoadSegment segment) {
         if (segmentMap.containsKey(segment.position())) {
@@ -38,6 +40,30 @@ public class RoadNetwork {
 
     public int size() {
         return segments.size();
+    }
+
+    public void incrementStraightRoadCount() {
+        this.straightRoadCount++;
+    }
+
+    public int getStraightRoadCount() {
+        return this.straightRoadCount;
+    }
+
+    public void initStopVariants(List<Integer> variants) {
+        this.availableStopVariants = new ArrayList<>(variants);
+    }
+
+    public List<Integer> getAvailableStopVariants() {
+        return this.availableStopVariants;
+    }
+
+    public Integer pollStopVariant() {
+        if (availableStopVariants.isEmpty()) {
+            return null;
+        }
+        int index = new java.util.Random().nextInt(availableStopVariants.size());
+        return availableStopVariants.remove(index);
     }
 
     public static List<Direction> getRotatedConnections(RoadConfig config, Rotation rotation) {

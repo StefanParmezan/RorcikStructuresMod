@@ -8,6 +8,7 @@ import net.minecraft.world.level.block.Rotation;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.RoadConfig;
@@ -22,7 +23,7 @@ import java.util.List;
 import java.util.Set;
 
 public class RoadDecorationsPlacer {
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
     public static final String[] DECOR_NAMES = {"a", "b", "c", "d", "e", "f", "g"};
 
     public static void collectDecorationActions(

@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.api.IStructureGenerator;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.city.plains.config_loaders.HouseConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.BuildingSlot;
 import ru.rorcik.structures.data.city.plains.containers.HouseConfig;
@@ -18,7 +19,6 @@ import java.util.List;
 import java.util.Set;
 
 public class BuildingGenerator implements IStructureGenerator {
-    private static final Logger LOGGER = LogUtils.getLogger();
 
     @Override
     public void generate(ServerLevel level, BlockPos origin, String type, net.minecraft.world.level.block.Rotation rotation) {

@@ -14,53 +14,66 @@ import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.generation.GeneratorConfig;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class CityBuildScheduler {
+    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
 
-    private static final Logger LOGGER = LogUtils.getLogger();
-    private static final ExecutorService PRELOAD_EXECUTOR = Executors.newFixedThreadPool(
+    private static final ExecutorService BACKGROUND_EXECUTOR = Executors.newFixedThreadPool(
             Math.max(1, Runtime.getRuntime().availableProcessors() - 2),
             r -> {
-                Thread t = new Thread(r, "StructurePreloader");
+                Thread t = new Thread(r, "CityAllocator");
                 t.setDaemon(true);
                 return t;
             }
     );
 
     private static final Deque<ChunkLoadTask> chunkQueue = new ArrayDeque<>();
-    private static List<GenerationPhase> phases = new ArrayList<>();
-    private static int currentPhaseIndex = 0;
+    private static final Deque<BuildTask> buildQueue = new ArrayDeque<>();
+    private static final Deque<ResourceLocation> preloadQueue = new ArrayDeque<>();
 
-    private static final AtomicInteger pendingPreloads = new AtomicInteger(0);
+    private static CompletableFuture<?> pendingBackgroundTask = null;
+    private static Runnable onBackgroundTaskDone = null;
+
     private static Runnable onChunksReady = null;
     private static boolean active = false;
-    private static int chunkReadyCooldownTicks = 0;
-    private static final int CHUNK_READY_DELAY_TICKS = 2;
 
-    private static long phaseStartTime = 0;
-    private static int totalPhaseActions = 0;
-    private static int completedPhaseActions = 0;
+    private static long buildStartTime = 0;
+    private static int totalBuildActions = 0;
+    private static int completedBuildActions = 0;
+
+    private static long chunkLoadStartTime = 0;
     private static int totalChunks = 0;
     private static int loadedChunks = 0;
 
-    private static int adaptiveActionsPerTick = GeneratorConfig.INITIAL_STRUCTURES_PER_TICK;
-    private static long totalPhaseTimeMs = 0;
+    private static int adaptiveStructuresPerTick = GeneratorConfig.INITIAL_STRUCTURES_PER_TICK;
+    private static long totalBuildTimeMs = 0;
     private static int adaptiveTickCount = 0;
     private static int warmupTicks = 0;
     private static final int WARMUP_TICKS = 15;
+    private static boolean readOnlySet = false;
+
+    private static final int PRELOAD_PER_TICK_DURING_CHUNKS = 6;
+    private static final int PRELOAD_PER_TICK_BEFORE_BUILD = 15;
+
     private static long lastLogTimeMs = 0;
     private static final long LOG_INTERVAL_MS = 1000;
+    private static int preloadedCount = 0;
+    private static int totalPreload = 0;
+
+    private static List<GenerationPhase> phases = new ArrayList<>();
+    private static int currentPhaseIndex = 0;
+    private static boolean phaseStarted = false;
 
     public record ChunkLoadTask(int chunkX, int chunkZ) {}
     public record BuildTask(Runnable action) {}
 
     public record GenerationPhase(
             String name,
-            Collection<ResourceLocation> templatesToPreload,
+            Set<ResourceLocation> templatesToPreload,
             List<Runnable> actions,
             StructureCache.Category categoryToClearAfter
     ) {}
@@ -75,33 +88,104 @@ public class CityBuildScheduler {
 
         phases = new ArrayList<>(generationPhases);
         currentPhaseIndex = 0;
+        phaseStarted = false;
         active = true;
         totalChunks = chunkKeys.size();
         loadedChunks = 0;
-        chunkReadyCooldownTicks = 0;
+        buildStartTime = System.currentTimeMillis();
+        lastLogTimeMs = System.currentTimeMillis();
 
         LOGGER.info("[SCHEDULER] Starting phased generation: {} phases, {} chunks", phases.size(), totalChunks);
     }
 
+    public static void scheduleChunkLoading(Set<Long> chunkKeys, Runnable whenReady) {
+        chunkQueue.clear();
+        buildQueue.clear();
+
+        for (long key : chunkKeys) {
+            int cx = (int) (key >> 32);
+            int cz = (int) key;
+            chunkQueue.add(new ChunkLoadTask(cx, cz));
+        }
+
+        onChunksReady = whenReady;
+        active = true;
+        totalChunks = chunkKeys.size();
+        loadedChunks = 0;
+        chunkLoadStartTime = System.currentTimeMillis();
+        lastLogTimeMs = System.currentTimeMillis();
+
+        adaptiveStructuresPerTick = GeneratorConfig.INITIAL_STRUCTURES_PER_TICK;
+        totalBuildTimeMs = 0;
+        adaptiveTickCount = 0;
+        warmupTicks = 0;
+
+        LOGGER.info("[SCHEDULER] Queued {} chunks for loading ({} per tick)",
+                totalChunks, GeneratorConfig.CHUNKS_PER_TICK);
+    }
+
+    public static void scheduleBackgroundTask(CompletableFuture<?> task, Runnable whenDone) {
+        pendingBackgroundTask = task;
+        onBackgroundTaskDone = whenDone;
+        LOGGER.info("[SCHEDULER] Background task scheduled");
+    }
+
+    public static ExecutorService getBackgroundExecutor() {
+        return BACKGROUND_EXECUTOR;
+    }
+
+    public static void queuePreload(Collection<ResourceLocation> templates) {
+        preloadQueue.addAll(templates);
+        totalPreload += templates.size();
+        if (!templates.isEmpty()) {
+            LOGGER.info("[SCHEDULER] Queued {} templates for interleaved preloading (total in queue: {})",
+                    templates.size(), preloadQueue.size());
+        }
+    }
+
+    public static void scheduleBuildActions(List<Runnable> actions) {
+        buildQueue.clear();
+        for (Runnable action : actions) {
+            buildQueue.add(new BuildTask(action));
+        }
+        totalBuildActions = actions.size();
+        completedBuildActions = 0;
+        buildStartTime = System.currentTimeMillis();
+        lastLogTimeMs = System.currentTimeMillis();
+
+        LOGGER.info("[SCHEDULER] Queued {} build actions (adaptive, starting at {} per tick)",
+                totalBuildActions, adaptiveStructuresPerTick);
+    }
+
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || !active) return;
+        if (event.phase != TickEvent.Phase.END) return;
+        if (!active) return;
 
         var server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
         if (server == null) return;
         ServerLevel level = server.overworld();
         if (level == null) return;
 
+        if (pendingBackgroundTask != null) {
+            if (pendingBackgroundTask.isDone()) {
+                LOGGER.info("[SCHEDULER] Background task completed");
+                Runnable callback = onBackgroundTaskDone;
+                pendingBackgroundTask = null;
+                onBackgroundTaskDone = null;
+                if (callback != null) {
+                    callback.run();
+                }
+            }
+            return;
+        }
+
         if (!chunkQueue.isEmpty()) {
             processChunkLoading(level);
         } else if (onChunksReady != null) {
-            if (chunkReadyCooldownTicks < CHUNK_READY_DELAY_TICKS) {
-                chunkReadyCooldownTicks++;
-            } else {
-                Runnable callback = onChunksReady;
-                onChunksReady = null;
-                callback.run();
-            }
+            Runnable callback = onChunksReady;
+            onChunksReady = null;
+            callback.run();
         } else if (currentPhaseIndex < phases.size()) {
             processCurrentPhase(level);
         } else {
@@ -109,9 +193,75 @@ public class CityBuildScheduler {
         }
     }
 
+    private static void processCurrentPhase(ServerLevel level) {
+        GenerationPhase phase = phases.get(currentPhaseIndex);
+
+        if (preloadQueue.isEmpty() && !phaseStarted) {
+            LOGGER.info("[SCHEDULER] === PHASE {}: {} ===", currentPhaseIndex + 1, phase.name());
+            preloadQueue.addAll(phase.templatesToPreload());
+            phaseStarted = true;
+        }
+
+        if (!preloadQueue.isEmpty()) {
+            processPreloadQueue(PRELOAD_PER_TICK_BEFORE_BUILD);
+        } else if (!phase.actions().isEmpty()) {
+            if (!readOnlySet) {
+                StructureCache.setReadOnly(true);
+                readOnlySet = true;
+            }
+            processPhaseActions(phase);
+        } else {
+            completeCurrentPhase();
+        }
+    }
+
+    private static void processPhaseActions(GenerationPhase phase) {
+        long startTime = System.currentTimeMillis();
+        int processed = 0;
+
+        while (!phase.actions().isEmpty() && processed < adaptiveStructuresPerTick) {
+            Runnable action = phase.actions().remove(0);
+            try {
+                action.run();
+                completedBuildActions++;
+            } catch (Exception e) {
+                LOGGER.error("[SCHEDULER] Build action failed in phase {}", phase.name(), e);
+            }
+            processed++;
+        }
+
+        long elapsed = System.currentTimeMillis() - startTime;
+        totalBuildTimeMs += elapsed;
+        adaptiveTickCount++;
+        warmupTicks++;
+
+        if (warmupTicks > WARMUP_TICKS) {
+            adjustStructuresPerTick(elapsed);
+        }
+
+        if (phase.actions().isEmpty()) {
+            completeCurrentPhase();
+        }
+    }
+
+    private static void completeCurrentPhase() {
+        GenerationPhase phase = phases.get(currentPhaseIndex);
+        LOGGER.info("[SCHEDULER] Phase {} completed", phase.name());
+
+        if (phase.categoryToClearAfter() != null) {
+            StructureCache.clearCategory(phase.categoryToClearAfter());
+        }
+
+        currentPhaseIndex++;
+        phaseStarted = false;
+        readOnlySet = false;
+        StructureCache.setReadOnly(false);
+    }
+
     private static void processChunkLoading(ServerLevel level) {
         int processed = 0;
         var iterator = chunkQueue.iterator();
+
         while (iterator.hasNext() && processed < GeneratorConfig.CHUNKS_PER_TICK) {
             ChunkLoadTask task = iterator.next();
             level.getChunkSource().getChunk(task.chunkX(), task.chunkZ(), ChunkStatus.FULL, true);
@@ -123,173 +273,87 @@ public class CityBuildScheduler {
         if (processed > 0 && totalChunks > 0) {
             long now = System.currentTimeMillis();
             if (now - lastLogTimeMs >= LOG_INTERVAL_MS || loadedChunks == totalChunks) {
-                LOGGER.info("[SCHEDULER] Chunks: {}/{} ({}%)", loadedChunks, totalChunks, (loadedChunks * 100) / totalChunks);
+                int percent = (loadedChunks * 100) / totalChunks;
+                LOGGER.info("[SCHEDULER] Chunks: {}/{} ({}%)", loadedChunks, totalChunks, percent);
                 lastLogTimeMs = now;
             }
         }
-
-        if (chunkQueue.isEmpty()) {
-            onChunksReady = () -> {
-                LOGGER.info("[SCHEDULER] Chunks stabilized. Beginning phased execution.");
-                prepareNextPhase();
-            };
-        }
     }
 
-    private static void prepareNextPhase() {
-        if (currentPhaseIndex >= phases.size()) return;
-
-        GenerationPhase phase = phases.get(currentPhaseIndex);
-        LOGGER.info("[SCHEDULER] === PHASE {}: {} ===", currentPhaseIndex + 1, phase.name());
-
-        StructureCache.setReadOnly(false);
-        pendingPreloads.set(0);
-
-        for (ResourceLocation loc : phase.templatesToPreload()) {
-            PRELOAD_EXECUTOR.submit(() -> {
-                try {
-                    StructureCache.precompile(loc);
-                } catch (Exception e) {
-                    LOGGER.error("[SCHEDULER] Preload failed: {}", loc, e);
-                } finally {
-                    pendingPreloads.decrementAndGet();
-                }
-            });
-            pendingPreloads.incrementAndGet();
-        }
-
-        totalPhaseActions = phase.actions().size();
-        completedPhaseActions = 0;
-        phaseStartTime = System.currentTimeMillis();
-        lastLogTimeMs = System.currentTimeMillis();
-        adaptiveActionsPerTick = GeneratorConfig.INITIAL_STRUCTURES_PER_TICK;
-        totalPhaseTimeMs = 0;
-        adaptiveTickCount = 0;
-        warmupTicks = 0;
-
-        if (phase.templatesToPreload().isEmpty()) {
-            executePhaseActions();
-        }
-    }
-
-    private static void processCurrentPhase(ServerLevel level) {
-        if (pendingPreloads.get() > 0) {
-            long now = System.currentTimeMillis();
-            if (now - lastLogTimeMs >= LOG_INTERVAL_MS) {
-                LOGGER.info("[SCHEDULER] Phase {} preloading: {} remaining", currentPhaseIndex + 1, pendingPreloads.get());
-                lastLogTimeMs = now;
-            }
-            return;
-        }
-
-        StructureCache.setReadOnly(true);
-        executePhaseActions();
-    }
-
-    private static void executePhaseActions() {
-        if (completedPhaseActions >= totalPhaseActions) {
-            completeCurrentPhase();
-            return;
-        }
-
-        long startTime = System.currentTimeMillis();
+    private static void processPreloadQueue(int perTick) {
         int processed = 0;
-        GenerationPhase phase = phases.get(currentPhaseIndex);
-        List<Runnable> actions = phase.actions();
-
-        while (completedPhaseActions < totalPhaseActions && processed < adaptiveActionsPerTick) {
-            Runnable action = actions.get(completedPhaseActions);
-            try {
-                action.run();
-                completedPhaseActions++;
-            } catch (Exception e) {
-                LOGGER.error("[SCHEDULER] Action failed in phase {}", phase.name(), e);
-                completedPhaseActions++;
+        while (!preloadQueue.isEmpty() && processed < perTick) {
+            ResourceLocation loc = preloadQueue.poll();
+            if (loc != null) {
+                StructureCache.get(loc);
+                preloadedCount++;
+                processed++;
             }
-            processed++;
-        }
-
-        long elapsed = System.currentTimeMillis() - startTime;
-        totalPhaseTimeMs += elapsed;
-        adaptiveTickCount++;
-        warmupTicks++;
-
-        if (warmupTicks > WARMUP_TICKS) {
-            adjustActionsPerTick(elapsed);
-        }
-
-        long now = System.currentTimeMillis();
-        if (completedPhaseActions == totalPhaseActions || completedPhaseActions % 50 == 0 || (now - lastLogTimeMs >= LOG_INTERVAL_MS)) {
-            LOGGER.info("[SCHEDULER] Phase {} progress: {}/{} (rate: {}/tick, tick: {} ms)",
-                    currentPhaseIndex + 1, completedPhaseActions, totalPhaseActions, adaptiveActionsPerTick, elapsed);
-            lastLogTimeMs = now;
-        }
-
-        if (completedPhaseActions >= totalPhaseActions) {
-            completeCurrentPhase();
-        }
-    }
-
-
-
-    private static void completeCurrentPhase() {
-        GenerationPhase phase = phases.get(currentPhaseIndex);
-        long elapsed = System.currentTimeMillis() - phaseStartTime;
-        LOGGER.info("[SCHEDULER] Phase {} completed in {} ms", currentPhaseIndex + 1, elapsed);
-
-        if (phase.categoryToClearAfter() != null) {
-            StructureCache.clearCategory(phase.categoryToClearAfter());
-        }
-
-        currentPhaseIndex++;
-        if (currentPhaseIndex < phases.size()) {
-            prepareNextPhase();
-        }
-    }
-
-    private static void adjustActionsPerTick(long elapsedMs) {
-        long target = GeneratorConfig.TARGET_TICK_TIME_MS;
-        int min = GeneratorConfig.MIN_STRUCTURES_PER_TICK;
-        int max = GeneratorConfig.MAX_STRUCTURES_PER_TICK;
-        int previous = adaptiveActionsPerTick;
-
-        if (elapsedMs > target) {
-            adaptiveActionsPerTick = Math.max(min, adaptiveActionsPerTick * 8 / 10);
-        } else if (elapsedMs < target / 2 && adaptiveActionsPerTick < max) {
-            adaptiveActionsPerTick = Math.min(max, adaptiveActionsPerTick * 12 / 10);
-        }
-
-        if (previous != adaptiveActionsPerTick) {
-            LOGGER.debug("[SCHEDULER] Adaptive rate: {} -> {}/tick ({} ms)", previous, adaptiveActionsPerTick, elapsedMs);
         }
     }
 
     private static void finishGeneration() {
-        LOGGER.info("[SCHEDULER] City generation fully complete.");
+        long elapsed = System.currentTimeMillis() - buildStartTime;
+        LOGGER.info("[SCHEDULER] City generation complete: {} structures in {} ms ({} per second)",
+                completedBuildActions, elapsed,
+                elapsed > 0 ? (completedBuildActions * 1000L) / elapsed : 0);
+
+        if (adaptiveTickCount > 0) {
+            LOGGER.info("[SCHEDULER] Adaptive stats: {} ticks, final rate: {} structures/tick, avg time per tick: {} ms",
+                    adaptiveTickCount, adaptiveStructuresPerTick, totalBuildTimeMs / adaptiveTickCount);
+        }
+
+        active = false;
+        StructureCache.setReadOnly(false);
+        readOnlySet = false;
         StructureCache.logStats();
 
         if (RorcikStructuresModConfig.unloadAfterGeneration) {
             StructureCache.clear();
         }
-
-        active = false;
-        phases.clear();
-        chunkQueue.clear();
-        pendingPreloads.set(0);
-        StructureCache.setReadOnly(false);
     }
 
-    public static boolean isActive() {
-        return active;
+    private static void adjustStructuresPerTick(long elapsedMs) {
+        long target = GeneratorConfig.TARGET_TICK_TIME_MS;
+        int min = GeneratorConfig.MIN_STRUCTURES_PER_TICK;
+        int max = GeneratorConfig.MAX_STRUCTURES_PER_TICK;
+        int previous = adaptiveStructuresPerTick;
+
+        if (elapsedMs > target) {
+            adaptiveStructuresPerTick = Math.max(min, adaptiveStructuresPerTick * 8 / 10);
+        } else if (elapsedMs < target / 2 && adaptiveStructuresPerTick < max) {
+            adaptiveStructuresPerTick = Math.min(max, adaptiveStructuresPerTick * 12 / 10);
+        }
+
+        if (previous != adaptiveStructuresPerTick) {
+            LOGGER.debug("[SCHEDULER] Adaptive rate: {} -> {} structures/tick (tick took {} ms)",
+                    previous, adaptiveStructuresPerTick, elapsedMs);
+        }
     }
 
     public static void reset() {
         chunkQueue.clear();
+        buildQueue.clear();
+        preloadQueue.clear();
         phases.clear();
         currentPhaseIndex = 0;
-        pendingPreloads.set(0);
+        phaseStarted = false;
+        pendingBackgroundTask = null;
+        onBackgroundTaskDone = null;
+        onChunksReady = null;
         active = false;
+        totalBuildActions = 0;
+        completedBuildActions = 0;
+        totalChunks = 0;
+        loadedChunks = 0;
+        preloadedCount = 0;
+        totalPreload = 0;
+        adaptiveStructuresPerTick = GeneratorConfig.INITIAL_STRUCTURES_PER_TICK;
+        totalBuildTimeMs = 0;
+        adaptiveTickCount = 0;
+        warmupTicks = 0;
+        lastLogTimeMs = 0;
+        readOnlySet = false;
         StructureCache.setReadOnly(false);
-        StructureCache.clear();
     }
 }
