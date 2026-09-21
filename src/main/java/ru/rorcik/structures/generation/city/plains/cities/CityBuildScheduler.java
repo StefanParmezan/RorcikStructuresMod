@@ -37,14 +37,12 @@ public class CityBuildScheduler {
 
     private static CompletableFuture<?> pendingBackgroundTask = null;
     private static Runnable onBackgroundTaskDone = null;
-
     private static Runnable onChunksReady = null;
-    private static boolean active = false;
 
+    private static boolean active = false;
     private static long buildStartTime = 0;
     private static int totalBuildActions = 0;
     private static int completedBuildActions = 0;
-
     private static long chunkLoadStartTime = 0;
     private static int totalChunks = 0;
     private static int loadedChunks = 0;
@@ -55,9 +53,6 @@ public class CityBuildScheduler {
     private static int warmupTicks = 0;
     private static final int WARMUP_TICKS = 15;
     private static boolean readOnlySet = false;
-
-    private static final int PRELOAD_PER_TICK_DURING_CHUNKS = 6;
-    private static final int PRELOAD_PER_TICK_BEFORE_BUILD = 15;
 
     private static long lastLogTimeMs = 0;
     private static final long LOG_INTERVAL_MS = 1000;
@@ -95,7 +90,9 @@ public class CityBuildScheduler {
         buildStartTime = System.currentTimeMillis();
         lastLogTimeMs = System.currentTimeMillis();
 
-        LOGGER.info("[SCHEDULER] Starting phased generation: {} phases, {} chunks", phases.size(), totalChunks);
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("[SCHEDULER] Starting phased generation: {} phases, {} chunks", phases.size(), totalChunks);
+        }
     }
 
     public static void scheduleChunkLoading(Set<Long> chunkKeys, Runnable whenReady) {
@@ -120,14 +117,18 @@ public class CityBuildScheduler {
         adaptiveTickCount = 0;
         warmupTicks = 0;
 
-        LOGGER.info("[SCHEDULER] Queued {} chunks for loading ({} per tick)",
-                totalChunks, GeneratorConfig.CHUNKS_PER_TICK);
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("[SCHEDULER] Queued {} chunks for loading ({} per tick)",
+                    totalChunks, GeneratorConfig.CHUNKS_PER_TICK);
+        }
     }
 
     public static void scheduleBackgroundTask(CompletableFuture<?> task, Runnable whenDone) {
         pendingBackgroundTask = task;
         onBackgroundTaskDone = whenDone;
-        LOGGER.info("[SCHEDULER] Background task scheduled");
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("[SCHEDULER] Background task scheduled");
+        }
     }
 
     public static ExecutorService getBackgroundExecutor() {
@@ -137,7 +138,7 @@ public class CityBuildScheduler {
     public static void queuePreload(Collection<ResourceLocation> templates) {
         preloadQueue.addAll(templates);
         totalPreload += templates.size();
-        if (!templates.isEmpty()) {
+        if (RorcikStructuresModConfig.enableLogging && !templates.isEmpty()) {
             LOGGER.info("[SCHEDULER] Queued {} templates for interleaved preloading (total in queue: {})",
                     templates.size(), preloadQueue.size());
         }
@@ -153,8 +154,10 @@ public class CityBuildScheduler {
         buildStartTime = System.currentTimeMillis();
         lastLogTimeMs = System.currentTimeMillis();
 
-        LOGGER.info("[SCHEDULER] Queued {} build actions (adaptive, starting at {} per tick)",
-                totalBuildActions, adaptiveStructuresPerTick);
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("[SCHEDULER] Queued {} build actions (adaptive, starting at {} per tick)",
+                    totalBuildActions, adaptiveStructuresPerTick);
+        }
     }
 
     @SubscribeEvent
@@ -169,7 +172,9 @@ public class CityBuildScheduler {
 
         if (pendingBackgroundTask != null) {
             if (pendingBackgroundTask.isDone()) {
-                LOGGER.info("[SCHEDULER] Background task completed");
+                if (RorcikStructuresModConfig.enableLogging) {
+                    LOGGER.info("[SCHEDULER] Background task completed");
+                }
                 Runnable callback = onBackgroundTaskDone;
                 pendingBackgroundTask = null;
                 onBackgroundTaskDone = null;
@@ -197,13 +202,15 @@ public class CityBuildScheduler {
         GenerationPhase phase = phases.get(currentPhaseIndex);
 
         if (preloadQueue.isEmpty() && !phaseStarted) {
-            LOGGER.info("[SCHEDULER] === PHASE {}: {} ===", currentPhaseIndex + 1, phase.name());
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("[SCHEDULER] === PHASE {}: {} ===", currentPhaseIndex + 1, phase.name());
+            }
             preloadQueue.addAll(phase.templatesToPreload());
             phaseStarted = true;
         }
 
         if (!preloadQueue.isEmpty()) {
-            processPreloadQueue(PRELOAD_PER_TICK_BEFORE_BUILD);
+            processPreloadQueue(GeneratorConfig.PRELOAD_PER_TICK_BEFORE_BUILD);
         } else if (!phase.actions().isEmpty()) {
             if (!readOnlySet) {
                 StructureCache.setReadOnly(true);
@@ -246,7 +253,9 @@ public class CityBuildScheduler {
 
     private static void completeCurrentPhase() {
         GenerationPhase phase = phases.get(currentPhaseIndex);
-        LOGGER.info("[SCHEDULER] Phase {} completed", phase.name());
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("[SCHEDULER] Phase {} completed", phase.name());
+        }
 
         if (phase.categoryToClearAfter() != null) {
             StructureCache.clearCategory(phase.categoryToClearAfter());
@@ -273,8 +282,10 @@ public class CityBuildScheduler {
         if (processed > 0 && totalChunks > 0) {
             long now = System.currentTimeMillis();
             if (now - lastLogTimeMs >= LOG_INTERVAL_MS || loadedChunks == totalChunks) {
-                int percent = (loadedChunks * 100) / totalChunks;
-                LOGGER.info("[SCHEDULER] Chunks: {}/{} ({}%)", loadedChunks, totalChunks, percent);
+                if (RorcikStructuresModConfig.enableLogging) {
+                    int percent = (loadedChunks * 100) / totalChunks;
+                    LOGGER.info("[SCHEDULER] Chunks: {}/{} ({}%)", loadedChunks, totalChunks, percent);
+                }
                 lastLogTimeMs = now;
             }
         }
@@ -294,19 +305,24 @@ public class CityBuildScheduler {
 
     private static void finishGeneration() {
         long elapsed = System.currentTimeMillis() - buildStartTime;
-        LOGGER.info("[SCHEDULER] City generation complete: {} structures in {} ms ({} per second)",
-                completedBuildActions, elapsed,
-                elapsed > 0 ? (completedBuildActions * 1000L) / elapsed : 0);
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("[SCHEDULER] City generation complete: {} structures in {} ms ({} per second)",
+                    completedBuildActions, elapsed,
+                    elapsed > 0 ? (completedBuildActions * 1000L) / elapsed : 0);
 
-        if (adaptiveTickCount > 0) {
-            LOGGER.info("[SCHEDULER] Adaptive stats: {} ticks, final rate: {} structures/tick, avg time per tick: {} ms",
-                    adaptiveTickCount, adaptiveStructuresPerTick, totalBuildTimeMs / adaptiveTickCount);
+            if (adaptiveTickCount > 0) {
+                LOGGER.info("[SCHEDULER] Adaptive stats: {} ticks, final rate: {} structures/tick, avg time per tick: {} ms",
+                        adaptiveTickCount, adaptiveStructuresPerTick, totalBuildTimeMs / adaptiveTickCount);
+            }
         }
 
         active = false;
         StructureCache.setReadOnly(false);
         readOnlySet = false;
-        StructureCache.logStats();
+
+        if (RorcikStructuresModConfig.enableLogging) {
+            StructureCache.logStats();
+        }
 
         if (RorcikStructuresModConfig.unloadAfterGeneration) {
             StructureCache.clear();
@@ -325,7 +341,7 @@ public class CityBuildScheduler {
             adaptiveStructuresPerTick = Math.min(max, adaptiveStructuresPerTick * 12 / 10);
         }
 
-        if (previous != adaptiveStructuresPerTick) {
+        if (previous != adaptiveStructuresPerTick && RorcikStructuresModConfig.debugMode) {
             LOGGER.debug("[SCHEDULER] Adaptive rate: {} -> {} structures/tick (tick took {} ms)",
                     previous, adaptiveStructuresPerTick, elapsedMs);
         }

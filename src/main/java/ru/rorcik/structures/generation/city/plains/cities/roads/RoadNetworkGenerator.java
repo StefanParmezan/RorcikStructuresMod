@@ -10,6 +10,7 @@ import net.minecraft.world.level.block.Rotation;
 import org.slf4j.Logger;
 import ru.rorcik.structures.common.ModPaths;
 import ru.rorcik.structures.common.RorcikStructuresMod;
+import ru.rorcik.structures.common.RorcikStructuresModConfig;
 import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.*;
@@ -25,9 +26,12 @@ import java.util.concurrent.CompletableFuture;
 
 public class RoadNetworkGenerator {
     private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
-    private static final int CHUNK_LOAD_RADIUS = 4;
 
     public static void generateRoadNetwork(ServerLevel level, BlockPos origin, long seed) {
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("=== GENERATING ROAD NETWORK ===");
+        }
+
         long uniqueSeed = seed ^ origin.hashCode() ^ System.nanoTime() ^ level.getRandom().nextLong();
         RandomSource random = RandomSource.create(uniqueSeed);
 
@@ -37,8 +41,10 @@ public class RoadNetworkGenerator {
 
         Set<Long> chunkKeys = collectChunkKeys(nodeMap.keySet(), straightPositions);
 
-        LOGGER.info("Graph built: {} nodes, {} straights, {} chunks needed",
-                nodeMap.size(), straightPositions.size(), chunkKeys.size());
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("Graph built: {} nodes, {} straights, {} chunks needed",
+                    nodeMap.size(), straightPositions.size(), chunkKeys.size());
+        }
 
         ParkWorldTracker tracker = ParkWorldTracker.get(level);
 
@@ -49,7 +55,9 @@ public class RoadNetworkGenerator {
 
         CityBuildScheduler.scheduleChunkLoading(chunkKeys, () -> {
             CityBuildScheduler.scheduleBackgroundTask(allocationFuture, () -> {
-                LOGGER.info("Chunks ready and allocation complete, building city...");
+                if (RorcikStructuresModConfig.enableLogging) {
+                    LOGGER.info("Chunks ready and allocation complete, building city...");
+                }
                 List<BuildingSlot> slots = allocationFuture.join();
 
                 List<CityBuildScheduler.GenerationPhase> phases = new ArrayList<>();
@@ -131,8 +139,10 @@ public class RoadNetworkGenerator {
             }
         }
 
-        LOGGER.info("[ROAD-PRELOAD] Collected {} road + decor templates for types: {}",
-                templates.size(), usedRoadTypes);
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("[ROAD-PRELOAD] Collected {} road + decor templates for types: {}",
+                    templates.size(), usedRoadTypes);
+        }
         return templates;
     }
 
@@ -216,8 +226,9 @@ public class RoadNetworkGenerator {
     private static void addChunksInRadius(BlockPos pos, Set<Long> chunkKeys) {
         int baseChunkX = pos.getX() >> 4;
         int baseChunkZ = pos.getZ() >> 4;
-        for (int dx = -RoadNetworkGenerator.CHUNK_LOAD_RADIUS; dx <= RoadNetworkGenerator.CHUNK_LOAD_RADIUS; dx++) {
-            for (int dz = -RoadNetworkGenerator.CHUNK_LOAD_RADIUS; dz <= RoadNetworkGenerator.CHUNK_LOAD_RADIUS; dz++) {
+        int radius = GeneratorConfig.CHUNK_LOAD_RADIUS;
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
                 long key = ((long) (baseChunkX + dx) << 32) | ((baseChunkZ + dz) & 0xFFFFFFFFL);
                 chunkKeys.add(key);
             }
