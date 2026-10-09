@@ -29,9 +29,8 @@ public class SidewalkPlacer {
             ServerLevel level,
             RandomSource random
     ) {
-        List<Runnable> actions = new ArrayList<>();
-        Map<BlockPos, BuildingSlot> slotMap = new HashMap<>();
-
+        List<Runnable> actions = new ArrayList<>(slots.size());
+        Map<BlockPos, BuildingSlot> slotMap = new HashMap<>(slots.size());
         for (BuildingSlot slot : slots) {
             slotMap.put(slot.position(), slot);
         }

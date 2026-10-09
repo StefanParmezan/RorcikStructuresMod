@@ -63,7 +63,9 @@ public class RoadNetworkGenerator {
                 List<CityBuildScheduler.GenerationPhase> phases = new ArrayList<>();
 
                 Set<ResourceLocation> roadTemplates = collectRoadTemplates(nodeMap);
-                List<Runnable> roadActions = new ArrayList<>();
+
+                List<Runnable> roadActions = new ArrayList<>(nodeMap.size() + straightPositions.size());
+
                 RoadNetwork network = new RoadNetwork();
                 collectRoadActions(level, network, random, root, new HashSet<>(), roadActions);
                 phases.add(new CityBuildScheduler.GenerationPhase(

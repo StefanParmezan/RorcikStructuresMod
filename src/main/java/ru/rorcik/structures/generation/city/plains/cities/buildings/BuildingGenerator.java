@@ -27,9 +27,19 @@ public class BuildingGenerator implements IStructureGenerator {
     }
 
     public static List<Runnable> collectBuildActions(ServerLevel level, List<BuildingSlot> slots) {
-        List<Runnable> actions = new ArrayList<>();
+        List<Runnable> actions = new ArrayList<>(slots.size());
         for (BuildingSlot slot : slots) {
             actions.add(() -> BuildingPlacer.placeBuildingShell(level, slot));
+        }
+        return actions;
+    }
+
+    public static List<Runnable> collectRoomPlacementActions(ServerLevel level, List<BuildingSlot> slots, RandomSource random) {
+        List<Runnable> actions = new ArrayList<>(slots.size());
+        for (BuildingSlot slot : slots) {
+            if (slot.category().equals("houses")) {
+                actions.add(() -> BuildingPlacer.placeHouseRoomsOnly(level, slot, random));
+            }
         }
         return actions;
     }
@@ -54,16 +64,6 @@ public class BuildingGenerator implements IStructureGenerator {
             }
         }
         return templates;
-    }
-
-    public static List<Runnable> collectRoomPlacementActions(ServerLevel level, List<BuildingSlot> slots, RandomSource random) {
-        List<Runnable> actions = new ArrayList<>();
-        for (BuildingSlot slot : slots) {
-            if (slot.category().equals("houses")) {
-                actions.add(() -> BuildingPlacer.placeHouseRoomsOnly(level, slot, random));
-            }
-        }
-        return actions;
     }
 
     public static Set<ResourceLocation> collectRequiredRoomTemplates(List<BuildingSlot> slots) {

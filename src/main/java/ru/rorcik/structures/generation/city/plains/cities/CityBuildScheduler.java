@@ -12,7 +12,6 @@ import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.common.RorcikStructuresModConfig;
 import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.generation.GeneratorConfig;
-
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -21,7 +20,6 @@ import java.util.concurrent.Executors;
 @Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class CityBuildScheduler {
     private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
-
     private static final ExecutorService BACKGROUND_EXECUTOR = Executors.newFixedThreadPool(
             Math.max(1, Runtime.getRuntime().availableProcessors() - 2),
             r -> {
@@ -34,11 +32,9 @@ public class CityBuildScheduler {
     private static final Deque<ChunkLoadTask> chunkQueue = new ArrayDeque<>();
     private static final Deque<BuildTask> buildQueue = new ArrayDeque<>();
     private static final Deque<ResourceLocation> preloadQueue = new ArrayDeque<>();
-
     private static CompletableFuture<?> pendingBackgroundTask = null;
     private static Runnable onBackgroundTaskDone = null;
     private static Runnable onChunksReady = null;
-
     private static boolean active = false;
     private static long buildStartTime = 0;
     private static int totalBuildActions = 0;
@@ -46,26 +42,22 @@ public class CityBuildScheduler {
     private static long chunkLoadStartTime = 0;
     private static int totalChunks = 0;
     private static int loadedChunks = 0;
-
     private static int adaptiveStructuresPerTick = GeneratorConfig.INITIAL_STRUCTURES_PER_TICK;
     private static long totalBuildTimeMs = 0;
     private static int adaptiveTickCount = 0;
     private static int warmupTicks = 0;
     private static final int WARMUP_TICKS = 15;
     private static boolean readOnlySet = false;
-
     private static long lastLogTimeMs = 0;
     private static final long LOG_INTERVAL_MS = 1000;
     private static int preloadedCount = 0;
     private static int totalPreload = 0;
-
     private static List<GenerationPhase> phases = new ArrayList<>();
     private static int currentPhaseIndex = 0;
     private static boolean phaseStarted = false;
 
     public record ChunkLoadTask(int chunkX, int chunkZ) {}
     public record BuildTask(Runnable action) {}
-
     public record GenerationPhase(
             String name,
             Set<ResourceLocation> templatesToPreload,
@@ -80,7 +72,6 @@ public class CityBuildScheduler {
             int cz = (int) key;
             chunkQueue.add(new ChunkLoadTask(cx, cz));
         }
-
         phases = new ArrayList<>(generationPhases);
         currentPhaseIndex = 0;
         phaseStarted = false;
@@ -98,20 +89,17 @@ public class CityBuildScheduler {
     public static void scheduleChunkLoading(Set<Long> chunkKeys, Runnable whenReady) {
         chunkQueue.clear();
         buildQueue.clear();
-
         for (long key : chunkKeys) {
             int cx = (int) (key >> 32);
             int cz = (int) key;
             chunkQueue.add(new ChunkLoadTask(cx, cz));
         }
-
         onChunksReady = whenReady;
         active = true;
         totalChunks = chunkKeys.size();
         loadedChunks = 0;
         chunkLoadStartTime = System.currentTimeMillis();
         lastLogTimeMs = System.currentTimeMillis();
-
         adaptiveStructuresPerTick = GeneratorConfig.INITIAL_STRUCTURES_PER_TICK;
         totalBuildTimeMs = 0;
         adaptiveTickCount = 0;
@@ -167,6 +155,7 @@ public class CityBuildScheduler {
 
         var server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
         if (server == null) return;
+
         ServerLevel level = server.overworld();
         if (level == null) return;
 
@@ -309,7 +298,6 @@ public class CityBuildScheduler {
             LOGGER.info("[SCHEDULER] City generation complete: {} structures in {} ms ({} per second)",
                     completedBuildActions, elapsed,
                     elapsed > 0 ? (completedBuildActions * 1000L) / elapsed : 0);
-
             if (adaptiveTickCount > 0) {
                 LOGGER.info("[SCHEDULER] Adaptive stats: {} ticks, final rate: {} structures/tick, avg time per tick: {} ms",
                         adaptiveTickCount, adaptiveStructuresPerTick, totalBuildTimeMs / adaptiveTickCount);
@@ -323,6 +311,8 @@ public class CityBuildScheduler {
         if (RorcikStructuresModConfig.enableLogging) {
             StructureCache.logStats();
         }
+
+        StructureCache.releaseRawCache();
 
         if (RorcikStructuresModConfig.unloadAfterGeneration) {
             StructureCache.clear();

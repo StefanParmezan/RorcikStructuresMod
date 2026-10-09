@@ -128,9 +128,14 @@ public class BuildingPlacer {
     private static String resolveRoomNbtFast(String baseName, String variant,
                                              boolean hasVariant, boolean hasBaseDecors,
                                              Set<Integer> baseDecors, int decor) {
-        if (hasVariant) return baseName + "_" + decor + "_" + variant;
-        if (hasBaseDecors && baseDecors.contains(decor)) return baseName + "_" + decor;
-        return baseName + "_" + decor + "_v";
+        StringBuilder sb = new StringBuilder(baseName.length() + 16);
+        sb.append(baseName).append('_').append(decor);
+        if (hasVariant) {
+            sb.append('_').append(variant);
+        } else if (!(hasBaseDecors && baseDecors.contains(decor))) {
+            sb.append("_v");
+        }
+        return sb.toString();
     }
 
     private static void placePark(ServerLevel level, BuildingSlot slot) {

@@ -61,15 +61,13 @@ public class RoomPlacer {
     private static String resolveRoomNbt(RoomSlot slot, int decor) {
         String baseName = slot.nbt();
         String variant = slot.variant();
-
+        StringBuilder sb = new StringBuilder(baseName.length() + 16);
+        sb.append(baseName).append('_').append(decor);
         if (!variant.isEmpty()) {
-            return baseName + "_" + decor + "_" + variant;
+            sb.append('_').append(variant);
+        } else if (!slot.baseDecors().contains(decor)) {
+            sb.append("_v");
         }
-
-        if (slot.baseDecors().contains(decor)) {
-            return baseName + "_" + decor;
-        }
-
-        return baseName + "_" + decor + "_v";
+        return sb.toString();
     }
 }
