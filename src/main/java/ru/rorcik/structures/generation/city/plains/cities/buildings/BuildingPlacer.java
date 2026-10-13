@@ -20,7 +20,6 @@ import ru.rorcik.structures.generation.GeneratorConfig;
 import ru.rorcik.structures.generation.StructureUtils;
 import ru.rorcik.structures.generation.city.plains.houses.HouseGenerator;
 import ru.rorcik.structures.generation.city.plains.houses.HousePositionCalculator;
-import ru.rorcik.structures.generation.city.plains.houses.RoomPlacer;
 
 import java.util.Optional;
 import java.util.Set;
@@ -66,7 +65,6 @@ public class BuildingPlacer {
         int houseSizeX = config.size()[0];
         int houseSizeZ = config.size()[2];
 
-
         for (RoomSlot room : config.rooms()) {
             placeAllFloorsForRoom(level, config, room, houseOrigin, slot.rotation(),
                     random, houseSizeX, houseSizeZ);
@@ -93,7 +91,6 @@ public class BuildingPlacer {
                 houseRotation
         );
 
-
         int baseY = config.firstFloorOffset() + rotatedRoomOffset[1];
         int roomX = houseOrigin.getX() + rotatedRoomPos[0] + rotatedRoomOffset[0];
         int roomZ = houseOrigin.getZ() + rotatedRoomPos[2] + rotatedRoomOffset[2];
@@ -108,7 +105,6 @@ public class BuildingPlacer {
         boolean mirrorZ = room.mirrorZ();
         int floorHeight = config.floorHeight();
         String configType = config.type();
-
 
         for (int i = 0; i < room.repeat(); i++) {
             int floor = room.startFloor() + i;

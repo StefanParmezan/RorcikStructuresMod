@@ -66,7 +66,6 @@ public class DesertCityGenerator {
             Rotation rotation = Rotation.values()[random.nextInt(4)];
             String nbtPath = RorcikStructuresMod.MODID + ":cities/desert/houses/" + buildingName;
 
-            // === FIX for flying buttons: compensate origin for rotation ===
             ResourceLocation location = ResourceLocation.tryParse(nbtPath);
             if (location == null) continue;
 

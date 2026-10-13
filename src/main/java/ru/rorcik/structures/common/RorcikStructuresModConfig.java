@@ -16,13 +16,11 @@ public class RorcikStructuresModConfig {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
 
-    // ==================== GENERAL ====================
     public static final ForgeConfigSpec.BooleanValue DEBUG_MODE;
     public static final ForgeConfigSpec.BooleanValue ENABLE_LOGGING;
     public static final ForgeConfigSpec.BooleanValue LOG_CACHE_MISSES;
     public static final ForgeConfigSpec.BooleanValue LOG_GENERATION_DETAILS;
 
-    // ==================== CACHE ====================
     public static final ForgeConfigSpec.BooleanValue USE_CACHING;
     public static final ForgeConfigSpec.IntValue BUILDING_CACHE_SIZE;
     public static final ForgeConfigSpec.IntValue ROOM_CACHE_SIZE;
@@ -31,7 +29,6 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.IntValue ROOM_MEMORY_BUDGET_PERCENT;
     public static final ForgeConfigSpec.LongValue RESERVED_RAM_MB;
 
-    // ==================== PERFORMANCE ====================
     public static final ForgeConfigSpec.IntValue INITIAL_STRUCTURES_PER_TICK;
     public static final ForgeConfigSpec.IntValue MIN_STRUCTURES_PER_TICK;
     public static final ForgeConfigSpec.IntValue MAX_STRUCTURES_PER_TICK;
@@ -40,7 +37,6 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.IntValue PRELOAD_PER_TICK_DURING_CHUNKS;
     public static final ForgeConfigSpec.IntValue PRELOAD_PER_TICK_BEFORE_BUILD;
 
-    // ==================== PLAINS CITY ====================
     public static final ForgeConfigSpec.IntValue PLAINS_ROAD_STEP;
     public static final ForgeConfigSpec.IntValue PLAINS_BUILDING_DISTANCE;
     public static final ForgeConfigSpec.IntValue PLAINS_STRAIGHT_BETWEEN_NODES;
@@ -55,7 +51,6 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.BooleanValue PLAINS_PARK_ONLY_RECT;
     public static final ForgeConfigSpec.IntValue PLAINS_CHUNK_LOAD_RADIUS;
 
-    // ==================== DESERT CITY ====================
     public static final ForgeConfigSpec.IntValue DESERT_BUILDING_COUNT;
     public static final ForgeConfigSpec.IntValue DESERT_STEP_MIN;
     public static final ForgeConfigSpec.IntValue DESERT_STEP_MAX;
@@ -63,11 +58,10 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.IntValue DESERT_MAX_DIRECTIONS;
     public static final ForgeConfigSpec.IntValue DESERT_Y_OFFSET;
 
-    // ==================== ROADS ====================
     public static final ForgeConfigSpec.BooleanValue ENABLE_ROAD_DECORATIONS;
 
     static {
-        // ==================== GENERAL ====================
+        
         BUILDER.comment("General mod settings").push("general");
         DEBUG_MODE = BUILDER
                 .comment("Enable debug mode (extra logging and checks)")
@@ -83,7 +77,6 @@ public class RorcikStructuresModConfig {
                 .define("logGenerationDetails", false);
         BUILDER.pop();
 
-        // ==================== CACHE ====================
         BUILDER.comment("Structure cache settings").push("cache");
         USE_CACHING = BUILDER
                 .comment("Enable structure caching (HIGHLY recommended)")
@@ -116,7 +109,6 @@ public class RorcikStructuresModConfig {
                 .defineInRange("reservedRamMb", 2048L, 512L, 16384L);
         BUILDER.pop();
 
-        // ==================== PERFORMANCE ====================
         BUILDER.comment("Performance / scheduling settings").push("performance");
         INITIAL_STRUCTURES_PER_TICK = BUILDER
                 .comment("Starting number of structures placed per tick")
@@ -141,7 +133,6 @@ public class RorcikStructuresModConfig {
                 .defineInRange("preloadPerTickBeforeBuild", 15, 1, 128);
         BUILDER.pop();
 
-        // ==================== PLAINS CITY ====================
         BUILDER.comment("Plains city generation settings").push("plains_city");
         PLAINS_ROAD_STEP = BUILDER
                 .comment("Distance between road nodes (in blocks). Affects city density.")
@@ -184,7 +175,6 @@ public class RorcikStructuresModConfig {
                 .defineInRange("chunkLoadRadius", 4, 1, 16);
         BUILDER.pop();
 
-        // ==================== DESERT CITY ====================
         BUILDER.comment("Desert city generation settings").push("desert_city");
         DESERT_BUILDING_COUNT = BUILDER
                 .comment("Number of buildings to generate in a desert city")
@@ -206,7 +196,6 @@ public class RorcikStructuresModConfig {
                 .defineInRange("yOffset", -1, -32, 32);
         BUILDER.pop();
 
-        // ==================== ROADS ====================
         BUILDER.comment("Road settings").push("roads");
         ENABLE_ROAD_DECORATIONS = BUILDER
                 .comment("Enable road decorations (lampposts, etc.)")
@@ -218,7 +207,6 @@ public class RorcikStructuresModConfig {
 
     public static final ForgeConfigSpec SPEC;
 
-    // Cached runtime values (updated on config load/reload)
     public static boolean debugMode;
     public static boolean enableLogging;
     public static boolean logCacheMisses;
