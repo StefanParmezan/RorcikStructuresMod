@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class RoadGraphBuilder {
-    static RoadNode buildGraph(
+    public static RoadNode buildGraph(
             RandomSource random,
             BlockPos startPos,
             Direction direction,

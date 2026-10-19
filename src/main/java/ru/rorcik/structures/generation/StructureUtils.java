@@ -11,12 +11,13 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.RorcikStructuresMod;
+import ru.rorcik.structures.common.RorcikStructuresModConfig;
 import ru.rorcik.structures.data.StructureCache;
+
 import java.util.Optional;
 
 public final class StructureUtils {
     private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
-
     private static final int UPDATE_CLIENTS = 2;
     private static final int UPDATE_SKIP_DROPS = 16;
     private static final int UPDATE_KNOWN_SHAPE = 64;
@@ -69,13 +70,15 @@ public final class StructureUtils {
     ) {
         ResourceLocation location = ResourceLocation.tryParse(nbtPath);
         if (location == null) {
-            LOGGER.error("[PLACE] Invalid resource location: {}", nbtPath);
+            LOGGER.error("Error: [PLACE] Invalid resource location: {}", nbtPath);
             return;
         }
 
         Optional<StructureTemplate> templateOpt = StructureCache.get(location);
         if (templateOpt.isEmpty()) {
-            LOGGER.warn("[PLACE] Structure not available in cache: {} (check preload logs)", nbtPath);
+            if (RorcikStructuresModConfig.logCacheMisses) {
+                LOGGER.warn("Warn: [PLACE] Structure not available in cache: {} (check preload logs)", nbtPath);
+            }
             return;
         }
 
@@ -96,9 +99,7 @@ public final class StructureUtils {
 
         BlockPos size = new BlockPos(template.getSize());
         BlockPos pivot = pivotAtOrigin ? origin : origin.offset(size);
-
         int placementFlags = UPDATE_CLIENTS | UPDATE_SKIP_DROPS | UPDATE_KNOWN_SHAPE;
-
         template.placeInWorld(level, origin, pivot, settings, level.getRandom(), placementFlags);
 
         if (level.hasChunkAt(origin)) {

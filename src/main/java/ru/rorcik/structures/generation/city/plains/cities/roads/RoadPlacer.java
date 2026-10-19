@@ -57,11 +57,9 @@ public class RoadPlacer {
 
         List<Direction> connections = RoadNetwork.getRotatedConnections(config, rotation);
         RoadSegment segment = new RoadSegment(type, position, rotation, decor, connections);
-
         if (!network.addSegment(segment)) {
             return null;
         }
-
         placeRoad(level, segment, config);
         return segment;
     }
@@ -80,20 +78,17 @@ public class RoadPlacer {
     static void placeRoad(ServerLevel level, RoadSegment segment, RoadConfig config) {
         String roadNbt = segment.type() + "_" + segment.decorVariant();
         String nbtPath = ModPaths.roadNbtPath(segment.type(), roadNbt);
-
         BlockPos roadOrigin = segment.position().offset(
                 config.offset()[0],
                 config.offset()[1],
                 config.offset()[2]
         );
-
         BlockPos placementOrigin = StructureUtils.getCompensatedOrigin(
                 roadOrigin,
                 segment.rotation(),
                 config.size()[0],
                 config.size()[2]
         );
-
         StructureUtils.placeStructure(
                 level,
                 placementOrigin,
@@ -117,14 +112,12 @@ public class RoadPlacer {
     public static RoadSegment generateSingleRoad(ServerLevel level, BlockPos origin, String type, Rotation rotation, int forcedDecor) {
         RoadConfig config = RoadConfigLoader.getConfig(type);
         if (config == null) {
-            LOGGER.error("Road config '{}' not found", type);
+            LOGGER.error("Error: Road config '{}' not found", type);
             return null;
         }
-
         int decorCount = config.decorCount();
         int decor = forcedDecor >= 0 ? forcedDecor : (decorCount > 0 ? level.getRandom().nextInt(decorCount) : 0);
         List<Direction> connections = RoadNetwork.getRotatedConnections(config, rotation);
-
         RoadSegment segment = new RoadSegment(type, origin, rotation, decor, connections);
         placeRoad(level, segment, config);
         return segment;

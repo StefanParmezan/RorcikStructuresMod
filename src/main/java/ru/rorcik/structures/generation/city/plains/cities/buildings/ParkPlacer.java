@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.ModPaths;
 import ru.rorcik.structures.common.RorcikStructuresMod;
+import ru.rorcik.structures.common.RorcikStructuresModConfig;
 import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.city.plains.config_loaders.ParkConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.ParkConfig;
@@ -51,7 +52,6 @@ public class ParkPlacer {
         Set<BlockPos> slots = new HashSet<>();
         int[] baseSize = getParkBaseSize(park);
         boolean rotated90 = isRotated90(rotation);
-
         int worldSizeX = rotated90 ? baseSize[1] : baseSize[0];
         int worldSizeZ = rotated90 ? baseSize[0] : baseSize[1];
 
@@ -60,7 +60,6 @@ public class ParkPlacer {
 
         Direction depthDir = side;
         Direction widthDir = side.getClockWise();
-
         int depthSlots, widthSlots;
         if (depthDir == Direction.NORTH || depthDir == Direction.SOUTH) {
             depthSlots = slotsAlongZ;
@@ -90,7 +89,6 @@ public class ParkPlacer {
         StructureUtils.placeStructureUsingOriginPivot(
                 level, placementPos, ModPaths.parkNbtPath(park.name()), rotation, false, false
         );
-
         ParkWorldTracker tracker = ParkWorldTracker.get(level);
         tracker.increment(park.name());
     }
@@ -122,8 +120,10 @@ public class ParkPlacer {
             if (park.canSpawn(currentCount)) {
                 available.add(park);
             } else {
-                LOGGER.debug("[PARK] '{}' reached world limit ({}/{}), skipping",
-                        park.name(), currentCount, park.worldCount());
+                if (RorcikStructuresModConfig.enableLogging) {
+                    LOGGER.debug("Info: [PARK] '{}' reached world limit ({}/{}), skipping",
+                            park.name(), currentCount, park.worldCount());
+                }
             }
         }
         return available;
@@ -133,9 +133,7 @@ public class ParkPlacer {
         List<ParkConfig> largeParks = ParkConfigLoader.getParks().stream()
                 .filter(p -> p.size()[0] >= 128 && p.size()[2] >= 128)
                 .toList();
-
         ParkWorldTracker tracker = ParkWorldTracker.get(level);
-
         List<ParkConfig> available = new ArrayList<>();
         for (ParkConfig park : largeParks) {
             if (park.name().equals(original.name())) continue;
@@ -144,12 +142,10 @@ public class ParkPlacer {
                 available.add(park);
             }
         }
-
         if (available.isEmpty()) {
-            LOGGER.warn("[PARK] No replacement parks available for '{}'", original.name());
+            LOGGER.warn("Warn: [PARK] No replacement parks available for '{}'", original.name());
             return null;
         }
-
         return available.get(random.nextInt(available.size()));
     }
 
@@ -182,22 +178,21 @@ public class ParkPlacer {
     public static void testPlacePark(ServerLevel level, BlockPos playerPos, String parkName, Rotation rotation) {
         ParkConfig park = ParkConfigLoader.getPark(parkName);
         if (park == null) {
-            LOGGER.error("[PARK-TEST] Park '{}' not found", parkName);
+            LOGGER.error("Error: [PARK-TEST] Park '{}' not found", parkName);
             return;
         }
-
         Direction side = calculateSideForRotation(rotation);
         BlockPos roadPos = playerPos.relative(side.getOpposite(), GeneratorConfig.BUILDING_DISTANCE);
         Set<BlockPos> slots = calculateSlots(roadPos, side, park, rotation);
 
-        LOGGER.info("[PARK-TEST] Park: {} | Rotation: {} | Side: {}", parkName, rotation, side);
-        LOGGER.info("[PARK-TEST] PlayerPos: {}", playerPos.toShortString());
-        LOGGER.info("[PARK-TEST] Virtual roadPos: {}", roadPos.toShortString());
-
-        for (BlockPos s : slots) {
-            LOGGER.info("[PARK-TEST]   Slot: {}", s.toShortString());
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("Info: [PARK-TEST] Park: {} | Rotation: {} | Side: {}", parkName, rotation, side);
+            LOGGER.info("Info: [PARK-TEST] PlayerPos: {}", playerPos.toShortString());
+            LOGGER.info("Info: [PARK-TEST] Virtual roadPos: {}", roadPos.toShortString());
+            for (BlockPos s : slots) {
+                LOGGER.info("Info: [PARK-TEST]   Slot: {}", s.toShortString());
+            }
         }
-
         placePark(level, roadPos, side, park, rotation);
     }
 }

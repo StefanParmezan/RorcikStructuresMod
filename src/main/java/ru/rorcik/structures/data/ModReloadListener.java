@@ -10,14 +10,14 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.city.plains.config_loaders.*;
-import ru.rorcik.structures.generation.city.plains.cities.CityBuildScheduler;
-
+import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityBuildScheduler;
+import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityGenerationContextRegistry;
+import ru.rorcik.structures.generation.city.plains.cities.scheduler.PlayerProximityTracker;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 @Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ModReloadListener {
-
     @SubscribeEvent
     public static void onAddReloadListeners(AddReloadListenerEvent event) {
         event.addListener(new StructureDataReloader());
@@ -36,6 +36,8 @@ public class ModReloadListener {
         BuildingConfigLoader.clear();
         ParkConfigLoader.clear();
         CityBuildScheduler.reset();
+        CityGenerationContextRegistry.clear();
+        PlayerProximityTracker.reset();
     }
 
     private static class StructureDataReloader implements PreparableReloadListener {
@@ -54,6 +56,7 @@ public class ModReloadListener {
                 BuildingConfigLoader.loadConfigs(resourceManager);
                 ParkConfigLoader.loadConfigs(resourceManager);
                 StructureCache.loadRawNbt(resourceManager);
-            }, backgroundExecutor).thenCompose(preparationBarrier::wait);        }
+            }, backgroundExecutor).thenCompose(preparationBarrier::wait);
+        }
     }
 }

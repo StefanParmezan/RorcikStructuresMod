@@ -19,7 +19,6 @@ import java.util.Optional;
 
 public class DesertCityGenerator {
     private static final Logger LOGGER = LogUtils.getLogger();
-
     private static final String[] DESERT_BUILDINGS = {
             "aa", "ab", "ac", "ad", "a", "b", "c", "d", "e", "f",
             "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
@@ -28,9 +27,9 @@ public class DesertCityGenerator {
 
     public static void generateCity(ServerLevel level, BlockPos origin, long seed) {
         if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("=== GENERATING DESERT CITY ===");
-            LOGGER.info("Origin: {}", origin.toShortString());
-            LOGGER.info("Config: buildings={}, step={}..{}, dirs={}..{}, yOffset={}",
+            LOGGER.info("Info: === GENERATING DESERT CITY ===");
+            LOGGER.info("Info: Origin: {}", origin.toShortString());
+            LOGGER.info("Info: Config: buildings={}, step={}..{}, dirs={}..{}, yOffset={}",
                     GeneratorConfig.DESERT_BUILDING_COUNT,
                     GeneratorConfig.DESERT_STEP_MIN, GeneratorConfig.DESERT_STEP_MAX,
                     GeneratorConfig.DESERT_MIN_DIRECTIONS, GeneratorConfig.DESERT_MAX_DIRECTIONS,
@@ -64,15 +63,15 @@ public class DesertCityGenerator {
             BlockPos pos = origin.offset(dx, yOffset, dz);
             String buildingName = DESERT_BUILDINGS[random.nextInt(DESERT_BUILDINGS.length)];
             Rotation rotation = Rotation.values()[random.nextInt(4)];
-            String nbtPath = RorcikStructuresMod.MODID + ":cities/desert/houses/" + buildingName;
 
+            String nbtPath = RorcikStructuresMod.MODID + ":cities/desert/houses/" + buildingName;
             ResourceLocation location = ResourceLocation.tryParse(nbtPath);
             if (location == null) continue;
 
             Optional<StructureTemplate> templateOpt = StructureCache.get(location);
             if (templateOpt.isEmpty()) {
                 if (RorcikStructuresModConfig.logCacheMisses) {
-                    LOGGER.warn("[DESERT] Template not found: {}", nbtPath);
+                    LOGGER.warn("Warn: [DESERT] Template not found: {}", nbtPath);
                 }
                 continue;
             }
@@ -82,12 +81,11 @@ public class DesertCityGenerator {
             BlockPos compensated = StructureUtils.getCompensatedOrigin(
                     pos, rotation, size.getX(), size.getZ()
             );
-
             StructureUtils.placeStructure(level, compensated, nbtPath, rotation, false, false);
         }
 
         if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("=== DESERT CITY GENERATION COMPLETE ===");
+            LOGGER.info("Success: === DESERT CITY GENERATION COMPLETE ===");
         }
     }
 }

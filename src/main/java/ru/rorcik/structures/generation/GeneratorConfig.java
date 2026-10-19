@@ -38,8 +38,13 @@ public final class GeneratorConfig {
     public static int ROOM_MEMORY_BUDGET_PERCENT = 30;
     public static long RESERVED_RAM_MB = 2048;
 
+    public static int BUFFER_DISTANCE = 96;
+    public static int ABANDON_DISTANCE = 192;
+    public static int MAX_PENDING_TASKS = 64;
+    public static int PROXIMITY_CHECK_INTERVAL_TICKS = 10;
+    public static int WORKER_POOL_SIZE = -1;
+
     public static void reload() {
-        
         ROAD_STEP = RorcikStructuresModConfig.plainsRoadStep;
         BUILDING_DISTANCE = RorcikStructuresModConfig.plainsBuildingDistance;
         STRAIGHT_BETWEEN_NODES = RorcikStructuresModConfig.plainsStraightBetweenNodes;
@@ -72,5 +77,11 @@ public final class GeneratorConfig {
         BUILDING_MEMORY_BUDGET_PERCENT = RorcikStructuresModConfig.buildingMemoryBudgetPercent;
         ROOM_MEMORY_BUDGET_PERCENT = RorcikStructuresModConfig.roomMemoryBudgetPercent;
         RESERVED_RAM_MB = RorcikStructuresModConfig.reservedRamMb;
+
+        BUFFER_DISTANCE = RorcikStructuresModConfig.bufferDistance;
+        ABANDON_DISTANCE = RorcikStructuresModConfig.abandonDistance;
+        MAX_PENDING_TASKS = RorcikStructuresModConfig.maxPendingTasks;
+        PROXIMITY_CHECK_INTERVAL_TICKS = RorcikStructuresModConfig.proximityCheckIntervalTicks;
+        WORKER_POOL_SIZE = RorcikStructuresModConfig.workerPoolSize;
     }
 }

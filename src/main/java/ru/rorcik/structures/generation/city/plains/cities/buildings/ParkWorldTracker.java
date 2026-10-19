@@ -6,6 +6,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.RorcikStructuresMod;
+import ru.rorcik.structures.common.RorcikStructuresModConfig;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -13,7 +14,6 @@ import java.util.Map;
 public class ParkWorldTracker extends SavedData {
     private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
     private static final String DATA_NAME = "rorcik_park_counts";
-
     private final Map<String, Integer> parkCounts = new HashMap<>();
 
     public static ParkWorldTracker get(ServerLevel level) {
@@ -30,7 +30,9 @@ public class ParkWorldTracker extends SavedData {
         for (String key : countsTag.getAllKeys()) {
             tracker.parkCounts.put(key, countsTag.getInt(key));
         }
-        LOGGER.info("[PARK-TRACKER] Loaded {} park counts from world data", tracker.parkCounts.size());
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("Info: [PARK-TRACKER] Loaded {} park counts from world data", tracker.parkCounts.size());
+        }
         return tracker;
     }
 
@@ -52,8 +54,10 @@ public class ParkWorldTracker extends SavedData {
         int newCount = parkCounts.getOrDefault(parkName, 0) + 1;
         parkCounts.put(parkName, newCount);
         setDirty();
-        LOGGER.info("[PARK-TRACKER] Park '{}' spawned {} times in this world",
-                parkName, newCount);
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("Info: [PARK-TRACKER] Park '{}' spawned {} times in this world",
+                    parkName, newCount);
+        }
     }
 
     public boolean canSpawn(String parkName, int limit) {
@@ -64,7 +68,9 @@ public class ParkWorldTracker extends SavedData {
     public void reset() {
         parkCounts.clear();
         setDirty();
-        LOGGER.info("[PARK-TRACKER] All park counts reset");
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("Cleanup: [PARK-TRACKER] All park counts reset");
+        }
     }
 
     public Map<String, Integer> getAllCounts() {

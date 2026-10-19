@@ -38,7 +38,7 @@ public class HouseGenerator implements IStructureGenerator {
         houseType = houseType.toLowerCase();
         HouseConfig config = HouseConfigLoader.getConfig(houseType);
         if (config == null) {
-            LOGGER.error("Config not found: {}", houseType);
+            LOGGER.error("Error: Config not found: {}", houseType);
             return;
         }
 
@@ -56,7 +56,6 @@ public class HouseGenerator implements IStructureGenerator {
         String houseNbt = houseType + "_" + houseDecor;
 
         StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseNbt), houseRotation, false, false);
-
         RoomPlacer.placeRooms(level, config, houseOrigin, houseRotation, random);
     }
 
@@ -64,7 +63,7 @@ public class HouseGenerator implements IStructureGenerator {
         houseType = houseType.toLowerCase();
         HouseConfig config = HouseConfigLoader.getConfig(houseType);
         if (config == null) {
-            LOGGER.error("Config not found: {}", houseType);
+            LOGGER.error("Error: Config not found: {}", houseType);
             return;
         }
 

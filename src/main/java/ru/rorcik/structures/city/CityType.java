@@ -8,33 +8,29 @@ public enum CityType {
     PLAINS(
             "plains",
             Set.of(TemperatureZone.COOL, TemperatureZone.NEUTRAL, TemperatureZone.WARM),
-            64,   
-            5000, 
-            200   
+            64,
+            5000
     ),
     DESERT(
             "desert",
             Set.of(TemperatureZone.HOT, TemperatureZone.EXTREME_HOT),
-            -1,   
-            1500,
-            100
+            -1,
+            1500
     );
 
     public final String id;
     public final Set<TemperatureZone> allowedZones;
     public final int targetHeight;
     public final int minDistance;
-    public final int estimatedRadius;
 
-    CityType(String id, Set<TemperatureZone> allowedZones, int targetHeight, int minDistance, int estimatedRadius) {
+    CityType(String id, Set<TemperatureZone> allowedZones, int targetHeight, int minDistance) {
         this.id = id;
         this.allowedZones = allowedZones;
         this.targetHeight = targetHeight;
         this.minDistance = minDistance;
-        this.estimatedRadius = estimatedRadius;
     }
 
     public ZoneRules toZoneRules() {
-        return new ZoneRules(this.id, this.minDistance, this.estimatedRadius);
+        return new ZoneRules(this.id, this.minDistance);
     }
 }

@@ -57,6 +57,11 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.IntValue DESERT_MIN_DIRECTIONS;
     public static final ForgeConfigSpec.IntValue DESERT_MAX_DIRECTIONS;
     public static final ForgeConfigSpec.IntValue DESERT_Y_OFFSET;
+    public static final ForgeConfigSpec.IntValue WORKER_POOL_SIZE;
+    public static final ForgeConfigSpec.IntValue BUFFER_DISTANCE;
+    public static final ForgeConfigSpec.IntValue ABANDON_DISTANCE;
+    public static final ForgeConfigSpec.IntValue MAX_PENDING_TASKS;
+    public static final ForgeConfigSpec.IntValue PROXIMITY_CHECK_INTERVAL_TICKS;
 
     public static final ForgeConfigSpec.BooleanValue ENABLE_ROAD_DECORATIONS;
 
@@ -200,6 +205,26 @@ public class RorcikStructuresModConfig {
         ENABLE_ROAD_DECORATIONS = BUILDER
                 .comment("Enable road decorations (lampposts, etc.)")
                 .define("enableRoadDecorations", true);
+        WORKER_POOL_SIZE = BUILDER
+                .comment("Number of worker threads for parallel city generation. -1 = auto-detect")
+                .defineInRange("workerPoolSize", -1, -1, 32);
+
+        BUFFER_DISTANCE = BUILDER
+                .comment("Distance in blocks at which city generation starts")
+                .defineInRange("bufferDistance", 96, 32, 512);
+
+        ABANDON_DISTANCE = BUILDER
+                .comment("Distance in blocks at which city generation pauses")
+                .defineInRange("abandonDistance", 192, 64, 1024);
+
+        MAX_PENDING_TASKS = BUILDER
+                .comment("Maximum number of anchor chunk tasks in queue")
+                .defineInRange("maxPendingTasks", 64, 16, 512);
+
+        PROXIMITY_CHECK_INTERVAL_TICKS = BUILDER
+                .comment("How often (in ticks) to check player position")
+                .defineInRange("proximityCheckIntervalTicks", 10, 1, 100);
+
         BUILDER.pop();
 
         SPEC = BUILDER.build();
@@ -248,6 +273,12 @@ public class RorcikStructuresModConfig {
     public static int desertMinDirections;
     public static int desertMaxDirections;
     public static int desertYOffset;
+
+    public static int workerPoolSize;
+    public static int bufferDistance;
+    public static int abandonDistance;
+    public static int maxPendingTasks;
+    public static int proximityCheckIntervalTicks;
 
     public static boolean enableRoadDecorations;
 
@@ -307,5 +338,10 @@ public class RorcikStructuresModConfig {
         desertYOffset = DESERT_Y_OFFSET.get();
 
         enableRoadDecorations = ENABLE_ROAD_DECORATIONS.get();
+        workerPoolSize = WORKER_POOL_SIZE.get();
+        bufferDistance = BUFFER_DISTANCE.get();
+        abandonDistance = ABANDON_DISTANCE.get();
+        maxPendingTasks = MAX_PENDING_TASKS.get();
+        proximityCheckIntervalTicks = PROXIMITY_CHECK_INTERVAL_TICKS.get();
     }
 }
