@@ -76,9 +76,24 @@ public final class StructureUtils {
 
         Optional<StructureTemplate> templateOpt = StructureCache.get(location);
         if (templateOpt.isEmpty()) {
-            if (RorcikStructuresModConfig.logCacheMisses) {
-                LOGGER.warn("Warn: [PLACE] Structure not available in cache: {} (check preload logs)", nbtPath);
+            StructureCache.Category cat = StructureCache.getCategoryFromPath(location.getPath());
+            Optional<ResourceLocation> fallbackOpt = StructureCache.getFallbackLocation(location, cat, level.getRandom());
+
+            if (fallbackOpt.isPresent()) {
+                ResourceLocation fallbackLoc = fallbackOpt.get();
+                if (RorcikStructuresModConfig.enableLogging) {
+                    LOGGER.info("Retry: [PLACE] Original missing {}, using fallback from same category: {}", nbtPath, fallbackLoc.getPath());
+                }
+                location = fallbackLoc;
+                templateOpt = StructureCache.get(location);
+            } else {
+                LOGGER.error("Error: [PLACE] CRITICAL: No valid structure found in category {} for {}. Leaving area empty.", cat, nbtPath);
+                return;
             }
+        }
+
+        if (templateOpt.isEmpty()) {
+            LOGGER.error("Error: [PLACE] Fallback also failed to load for: {}", nbtPath);
             return;
         }
 
@@ -100,6 +115,7 @@ public final class StructureUtils {
         BlockPos size = new BlockPos(template.getSize());
         BlockPos pivot = pivotAtOrigin ? origin : origin.offset(size);
         int placementFlags = UPDATE_CLIENTS | UPDATE_SKIP_DROPS | UPDATE_KNOWN_SHAPE;
+
         template.placeInWorld(level, origin, pivot, settings, level.getRandom(), placementFlags);
 
         if (level.hasChunkAt(origin)) {

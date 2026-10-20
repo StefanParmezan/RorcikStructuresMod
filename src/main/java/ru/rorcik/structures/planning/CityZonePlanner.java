@@ -26,6 +26,7 @@ import ru.rorcik.structures.generation.city.plains.cities.buildings.ParkWorldTra
 import ru.rorcik.structures.generation.city.plains.cities.roads.RoadGraphBuilder;
 import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityGenerationContext;
 import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityGenerationContextRegistry;
+import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityGenerationSavedData;
 import ru.rorcik.structures.generation.city.plains.cities.scheduler.PlayerProximityTracker;
 
 import java.util.*;
@@ -38,7 +39,6 @@ public class CityZonePlanner {
             LOGGER.info("Info: [CITY-PLANNER] Reserving zone for {} city at [{}, {}]", type.id, centerX, centerZ);
         }
 
-        // 1. Biome check
         BlockPos checkPos = new BlockPos(centerX, level.getSeaLevel(), centerZ);
         Holder<Biome> biomeHolder = level.getBiome(checkPos);
         ResourceLocation biomeId = biomeHolder.unwrapKey().map(k -> k.location()).orElse(null);
@@ -55,28 +55,20 @@ public class CityZonePlanner {
             return false;
         }
 
-        // 2. Zone reservation
         ZoneRegistrySavedData registry = ZoneRegistrySavedData.get(level);
         boolean reserved = registry.tryReserveZone(centerX, centerZ, type.toZoneRules());
         if (!reserved) {
             LOGGER.warn("Warn: [CITY-PLANNER] Zone already occupied");
             return false;
         }
+
         if (RorcikStructuresModConfig.enableLogging) {
             LOGGER.info("Success: [CITY-PLANNER] Zone reserved");
         }
 
-        // 3. DRY RUN to get real chunks for RWG
-        if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Info: [CITY-PLANNER] Performing dry run...");
-        }
         DryRunResult dryRun = performDryRun(level, centerX, centerZ, type.targetHeight);
         Set<Long> affectedChunks = calculateExactChunks(dryRun);
-        if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Success: [CITY-PLANNER] Dry run complete. Chunks: {}", affectedChunks.size());
-        }
 
-        // 4. Save context
         CityGenerationContext context = new CityGenerationContext(
                 centerX, centerZ, type.id, type.targetHeight,
                 dryRun.nodeMap, dryRun.straightPositions, dryRun.slots,
@@ -84,12 +76,13 @@ public class CityZonePlanner {
         );
         CityGenerationContextRegistry.register(context);
 
-        // 5. Post event with REAL chunks (for RWG)
+        CityGenerationSavedData genData = CityGenerationSavedData.get(level);
+        genData.registerCity(centerX, centerZ, type.targetHeight);
+
         MinecraftForge.EVENT_BUS.post(new ZoneEvents.ZoneReservedEvent(
                 centerX, centerZ, type.toZoneRules(), type.targetHeight, affectedChunks
         ));
 
-        // 6. Register in tracker with chunks (for bbox calculation)
         PlayerProximityTracker.registerCity(centerX, centerZ, affectedChunks);
 
         if (RorcikStructuresModConfig.enableLogging) {
@@ -98,11 +91,43 @@ public class CityZonePlanner {
         return true;
     }
 
+    public static CityGenerationContext rebuildContext(ServerLevel level, int centerX, int centerZ) {
+        CityGenerationSavedData genData = CityGenerationSavedData.get(level);
+        CityGenerationSavedData.CityGenState state = genData.getState(centerX, centerZ);
+
+        if (state == null) {
+            LOGGER.error("Error: [CITY-PLANNER] Cannot rebuild context: city at [{}, {}] not registered in NBT", centerX, centerZ);
+            return null;
+        }
+
+        if (state.isComplete()) {
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [CITY-PLANNER] City at [{}, {}] is already complete, skipping rebuild", centerX, centerZ);
+            }
+            return null;
+        }
+
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("Info: [CITY-PLANNER] Rebuilding context for city at [{}, {}] with targetHeight {}", centerX, centerZ, state.targetHeight());
+        }
+
+        DryRunResult dryRun = performDryRun(level, centerX, centerZ, state.targetHeight());
+
+        CityGenerationContext context = new CityGenerationContext(
+                centerX, centerZ, "plains", state.targetHeight(),
+                dryRun.nodeMap, dryRun.straightPositions, dryRun.slots,
+                dryRun.roadNetwork, dryRun.seed, dryRun.baseY
+        );
+        CityGenerationContextRegistry.register(context);
+        return context;
+    }
+
     private static DryRunResult performDryRun(ServerLevel level, int centerX, int centerZ, int targetHeight) {
         int baseY = targetHeight != -1 ? targetHeight : level.getHeight(Heightmap.Types.WORLD_SURFACE, centerX, centerZ);
         BlockPos origin = new BlockPos(centerX, baseY, centerZ);
-        long seed = level.getSeed() ^ origin.hashCode() ^ System.nanoTime();
-        RandomSource random = RandomSource.create(seed);
+
+        long deterministicSeed = level.getSeed() ^ ((long) centerX << 32) | (centerZ & 0xFFFFFFFFL);
+        RandomSource random = RandomSource.create(deterministicSeed);
 
         Map<BlockPos, RoadNode> nodeMap = new HashMap<>();
         Set<BlockPos> straightPositions = new HashSet<>();
@@ -114,7 +139,7 @@ public class CityZonePlanner {
                 level, nodeMap, straightPositions, new HashSet<>(), random, tracker
         );
 
-        return new DryRunResult(seed, nodeMap, straightPositions, slots, roadNetwork, baseY);
+        return new DryRunResult(deterministicSeed, nodeMap, straightPositions, slots, roadNetwork, baseY);
     }
 
     private record DryRunResult(

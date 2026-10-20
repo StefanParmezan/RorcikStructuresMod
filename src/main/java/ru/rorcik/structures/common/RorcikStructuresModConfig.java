@@ -217,9 +217,8 @@ public class RorcikStructuresModConfig {
                 .comment("Distance in blocks at which city generation pauses")
                 .defineInRange("abandonDistance", 192, 64, 1024);
 
-        MAX_PENDING_TASKS = BUILDER
-                .comment("Maximum number of anchor chunk tasks in queue")
-                .defineInRange("maxPendingTasks", 64, 16, 512);
+        MAX_PENDING_TASKS = BUILDER.comment("Maximum number of anchor chunk tasks in queue")
+                .defineInRange("maxPendingTasks", 512, 16, 2048);
 
         PROXIMITY_CHECK_INTERVAL_TICKS = BUILDER
                 .comment("How often (in ticks) to check player position")

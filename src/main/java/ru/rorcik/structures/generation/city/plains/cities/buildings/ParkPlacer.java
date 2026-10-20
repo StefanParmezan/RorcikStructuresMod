@@ -164,6 +164,9 @@ public class ParkPlacer {
     }
 
     private static int[] getParkBaseSize(ParkConfig park) {
+        if (!StructureCache.isInitialized()) {
+            return new int[]{park.size()[0], park.size()[2]};
+        }
         ResourceLocation location = ResourceLocation.tryParse(ModPaths.parkNbtPath(park.name()));
         if (location != null) {
             Optional<StructureTemplate> templateOpt = StructureCache.get(location);

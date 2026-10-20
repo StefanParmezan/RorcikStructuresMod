@@ -5,7 +5,8 @@ public enum PhaseType {
     ROAD_DECOR,
     HOUSE_SHELL,
     INSTALL,
-    ROOMS;
+    ROOMS,
+    SIDEWALKS;
 
     public int order() {
         return ordinal();

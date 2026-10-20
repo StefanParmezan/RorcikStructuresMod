@@ -18,9 +18,7 @@ public class PriorityTaskQueue {
 
     public boolean offer(AnchorChunkTask task) {
         if (tasks.size() >= maxCapacity) {
-            if (RorcikStructuresModConfig.enableLogging) {
-                LOGGER.debug("Warn: [TASK-QUEUE] Queue full ({}/{}), rejecting task {}", tasks.size(), maxCapacity, task);
-            }
+            LOGGER.warn("Warn: [TASK-QUEUE] Queue full ({}/{}), rejecting task {}", tasks.size(), maxCapacity, task);
             return false;
         }
         PrioritizedTask prioritized = new PrioritizedTask(task, task.priority(), uniqueSequence.getAndIncrement());
@@ -47,6 +45,23 @@ public class PriorityTaskQueue {
         if (RorcikStructuresModConfig.enableLogging) {
             LOGGER.debug("Info: [TASK-QUEUE] Updated priorities for {} tasks based on player at [{}, {}]", oldTasks.size(), playerBlockX, playerBlockZ);
         }
+    }
+
+    public int removeTasksForCity(int cityX, int cityZ) {
+        int removed = 0;
+        Iterator<PrioritizedTask> it = tasks.iterator();
+        while (it.hasNext()) {
+            PrioritizedTask pt = it.next();
+            if (pt.task.centerX() == cityX && pt.task.centerZ() == cityZ
+                    && pt.task.state() == AnchorChunkTask.State.PENDING) {
+                it.remove();
+                removed++;
+            }
+        }
+        if (RorcikStructuresModConfig.enableLogging && removed > 0) {
+            LOGGER.info("Info: [TASK-QUEUE] Removed {} pending tasks for city [{}, {}]", removed, cityX, cityZ);
+        }
+        return removed;
     }
 
     public int size() { return tasks.size(); }

@@ -14,8 +14,16 @@ public class ChunkGrouper {
 
     public static List<AnchorChunkTask> groupIntoAnchorChunks(
             Map<BlockPos, RoadNode> nodeMap, Set<BlockPos> straightPositions,
-            List<BuildingSlot> slots, PhaseBuilder phaseBuilder) {
+            List<BuildingSlot> slots, PhaseBuilder phaseBuilder, int cityCenterX, int cityCenterZ) {
+
         Map<Long, List<SlotWork>> grouped = new LinkedHashMap<>();
+
+        for (BuildingSlot slot : slots) {
+            BlockPos pos = slot.position();
+            long anchorKey = anchorKeyForBlock(pos.getX(), pos.getZ());
+            SlotWork work = phaseBuilder.buildForBuildingSlot(slot);
+            grouped.computeIfAbsent(anchorKey, k -> new ArrayList<>()).add(work);
+        }
 
         for (Map.Entry<BlockPos, RoadNode> entry : nodeMap.entrySet()) {
             BlockPos pos = entry.getKey();
@@ -31,24 +39,17 @@ public class ChunkGrouper {
             grouped.computeIfAbsent(anchorKey, k -> new ArrayList<>()).add(work);
         }
 
-        for (BuildingSlot slot : slots) {
-            BlockPos pos = slot.position();
-            long anchorKey = anchorKeyForBlock(pos.getX(), pos.getZ());
-            SlotWork work = phaseBuilder.buildForBuildingSlot(slot);
-            grouped.computeIfAbsent(anchorKey, k -> new ArrayList<>()).add(work);
-        }
-
         List<AnchorChunkTask> tasks = new ArrayList<>();
         for (Map.Entry<Long, List<SlotWork>> entry : grouped.entrySet()) {
             long key = entry.getKey();
             int anchorChunkX = (int) (key >> 32);
             int anchorChunkZ = (int) (key & 0xFFFFFFFFL);
-            tasks.add(new AnchorChunkTask(anchorChunkX, anchorChunkZ, entry.getValue()));
+            tasks.add(new AnchorChunkTask(anchorChunkX, anchorChunkZ, entry.getValue(), cityCenterX, cityCenterZ));
         }
 
         if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Info: [CHUNK-GROUPER] Grouped {} slots into {} anchor chunks (4x4)",
-                    nodeMap.size() + straightPositions.size() + slots.size(), tasks.size());
+            LOGGER.info("Info: [CHUNK-GROUPER] Grouped {} slots into {} anchor chunks (4x4) for city [{}, {}]",
+                    nodeMap.size() + straightPositions.size() + slots.size(), tasks.size(), cityCenterX, cityCenterZ);
         }
         return tasks;
     }

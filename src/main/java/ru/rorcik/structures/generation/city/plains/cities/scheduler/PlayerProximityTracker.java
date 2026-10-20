@@ -11,6 +11,7 @@ import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.common.RorcikStructuresModConfig;
 import ru.rorcik.structures.generation.GeneratorConfig;
+import ru.rorcik.structures.planning.CityZonePlanner;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -100,6 +101,12 @@ public class PlayerProximityTracker {
         int bufferDistance = GeneratorConfig.BUFFER_DISTANCE;
         int abandonDistance = GeneratorConfig.ABANDON_DISTANCE;
 
+        CityGenerationSavedData.CityGenState state = CityGenerationSavedData.get(level).getState(city.centerX, city.centerZ);
+        if (state != null && state.isComplete()) {
+            city.state = CityState.COMPLETED;
+            return;
+        }
+
         switch (city.state) {
             case PENDING:
                 if (distance <= bufferDistance) {
@@ -114,20 +121,20 @@ public class PlayerProximityTracker {
             case GENERATING:
                 if (distance > abandonDistance) {
                     if (RorcikStructuresModConfig.enableLogging) {
-                        LOGGER.info("Info: [PROXIMITY] Player left city '{}' (bbox distance={} > {})",
+                        LOGGER.info("Info: [PROXIMITY] Player left city '{}' (bbox distance={} > {}) — entering cold mode",
                                 city.cityId, distance, abandonDistance);
                     }
                     city.state = CityState.PAUSED;
-                    CityBuildScheduler.pauseCityGeneration(city);
+                    CityBuildScheduler.pauseCityGeneration(city, level);
                 }
                 break;
             case PAUSED:
                 if (distance <= bufferDistance) {
                     if (RorcikStructuresModConfig.enableLogging) {
-                        LOGGER.info("Info: [PROXIMITY] Player returned to city '{}'", city.cityId);
+                        LOGGER.info("Info: [PROXIMITY] Player returned to city '{}' — resuming from journal", city.cityId);
                     }
                     city.state = CityState.GENERATING;
-                    CityBuildScheduler.resumeCityGeneration(city);
+                    CityBuildScheduler.resumeCityGeneration(city, level, playerX, playerZ);
                 }
                 break;
             case COMPLETED:
@@ -137,10 +144,16 @@ public class PlayerProximityTracker {
 
     private static void startGeneration(CityInfo city, ServerLevel level, int playerX, int playerZ) {
         CityGenerationContext context = CityGenerationContextRegistry.get(city.centerX, city.centerZ);
+
         if (context == null) {
-            LOGGER.error("Error: [PROXIMITY] No context for city '{}'", city.cityId);
+            context = CityZonePlanner.rebuildContext(level, city.centerX, city.centerZ);
+        }
+
+        if (context == null) {
+            LOGGER.error("Error: [PROXIMITY] No context available for city '{}'", city.cityId);
             return;
         }
+
         CityBuildScheduler.startCityGeneration(city, level, context, playerX, playerZ);
     }
 

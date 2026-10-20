@@ -40,7 +40,7 @@ public final class GeneratorConfig {
 
     public static int BUFFER_DISTANCE = 96;
     public static int ABANDON_DISTANCE = 192;
-    public static int MAX_PENDING_TASKS = 64;
+    public static int MAX_PENDING_TASKS = 4096;
     public static int PROXIMITY_CHECK_INTERVAL_TICKS = 10;
     public static int WORKER_POOL_SIZE = -1;
 

@@ -19,7 +19,7 @@ import java.util.*;
 
 public class PhaseBuilder {
     private static final Logger LOGGER = LogUtils.getLogger();
-    
+
     private final ServerLevel level;
     private final RoadNetwork roadNetwork;
     private final RandomSource baseRandom;
@@ -27,10 +27,14 @@ public class PhaseBuilder {
     private final int baseY;
     private final Map<BlockPos, RoadNode> nodeMap;
     private final Set<BlockPos> straightPositions;
+    private final int cityCenterX;
+    private final int cityCenterZ;
+    private final CityJournal journal;
 
     public PhaseBuilder(ServerLevel level, RoadNetwork roadNetwork, RandomSource baseRandom,
                         List<BuildingSlot> slots, int baseY,
-                        Map<BlockPos, RoadNode> nodeMap, Set<BlockPos> straightPositions) {
+                        Map<BlockPos, RoadNode> nodeMap, Set<BlockPos> straightPositions,
+                        int cityCenterX, int cityCenterZ) {
         this.level = level;
         this.roadNetwork = roadNetwork;
         this.baseRandom = baseRandom;
@@ -39,7 +43,11 @@ public class PhaseBuilder {
         this.straightPositions = straightPositions;
         this.slotMap = new HashMap<>();
         for (BuildingSlot slot : slots) slotMap.put(slot.position(), slot);
+        this.cityCenterX = cityCenterX;
+        this.cityCenterZ = cityCenterZ;
+        this.journal = CityJournal.load(cityCenterX, cityCenterZ, level);
     }
+
 
     public SlotWork buildForRoadNode(RoadNode node, BlockPos pos) {
         String slotId = "road_node@" + pos.getX() + "," + pos.getZ();
@@ -59,21 +67,35 @@ public class PhaseBuilder {
         String slotId = slot.category() + "@" + slot.position().getX() + "," + slot.position().getZ();
         List<Phase> phases = new ArrayList<>();
         String category = slot.category();
+
         if ("houses".equals(category)) {
             phases.add(new Phase(PhaseType.HOUSE_SHELL,
-                    () -> BuildingPlacer.placeBuildingShell(level, slot),
+                    () -> {
+                        BuildingPlacer.placeBuildingShell(level, slot);
+                        journal.markTaskCompleted(slot.position().getX() >> 6, slot.position().getZ() >> 6, "HOUSE_SHELL");
+                    },
                     BuildingGenerator.collectRequiredBuildTemplates(List.of(slot))));
             phases.add(new Phase(PhaseType.INSTALL,
+                    () -> {},
+                    Collections.emptySet()));
+            phases.add(new Phase(PhaseType.ROOMS,
+                    () -> {
+                        BuildingPlacer.placeHouseRoomsOnly(level, slot, createDeterministicRandom(slot.position()));
+                        journal.markTaskCompleted(slot.position().getX() >> 6, slot.position().getZ() >> 6, "ROOMS");
+                    },
+                    BuildingGenerator.collectRequiredRoomTemplates(List.of(slot))));
+            phases.add(new Phase(PhaseType.SIDEWALKS,
                     () -> SidewalkPlacer.placeSidewalkForSlot(level, slot, createDeterministicRandom(slot.position())),
                     SidewalkPlacer.collectRequiredTemplates()));
-            phases.add(new Phase(PhaseType.ROOMS,
-                    () -> BuildingPlacer.placeHouseRoomsOnly(level, slot, createDeterministicRandom(slot.position())),
-                    BuildingGenerator.collectRequiredRoomTemplates(List.of(slot))));
         } else if ("parks".equals(category) || "platforms".equals(category) || "other".equals(category) || "lootable".equals(category)) {
             phases.add(new Phase(PhaseType.INSTALL,
-                    () -> BuildingPlacer.placeBuilding(level, slot),
+                    () -> {
+                        BuildingPlacer.placeBuilding(level, slot);
+                        journal.markTaskCompleted(slot.position().getX() >> 6, slot.position().getZ() >> 6, "INSTALL");
+                    },
                     BuildingGenerator.collectRequiredBuildTemplates(List.of(slot))));
         }
+
         return new SlotWork(slotId, phases);
     }
 
@@ -85,7 +107,8 @@ public class PhaseBuilder {
 
         RoadSegment segment = RoadPlacer.createAndPlaceRoad(
                 level, roadNetwork, entry.type(), pos, entry.rotation(),
-                createDeterministicRandom(pos)
+                createDeterministicRandom(pos), -1,
+                cityCenterX, cityCenterZ
         );
 
         if (segment != null) {
@@ -116,7 +139,7 @@ public class PhaseBuilder {
         }
 
         RoadSegment segment = RoadPlacer.createAndPlaceRoad(
-                level, roadNetwork, roadTypeToPlace, pos, rotation, random, forcedDecor
+                level, roadNetwork, roadTypeToPlace, pos, rotation, random, forcedDecor, cityCenterX, cityCenterZ
         );
 
         if (segment != null) {

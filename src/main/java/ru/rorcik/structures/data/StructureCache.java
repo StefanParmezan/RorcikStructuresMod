@@ -5,16 +5,20 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+import net.minecraftforge.server.ServerLifecycleHooks;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
-import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.common.RorcikStructuresModConfig;
+
 import java.io.InputStream;
 import java.lang.ref.SoftReference;
 import java.util.*;
@@ -27,9 +31,8 @@ public class StructureCache {
         ROOMS, HOUSES, ROADS, BUILDINGS, PARKS, SIDEWALKS, ROAD_DECOR, UNKNOWN
     }
 
-    private static final Logger LOGGER = RorcikStructuresMod.LOGGER;
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final ReentrantReadWriteLock RW_LOCK = new ReentrantReadWriteLock();
-
     private static final Map<ResourceLocation, SoftReference<byte[]>> COMPRESSED_RAW_CACHE = new ConcurrentHashMap<>();
     private static final Set<ResourceLocation> KNOWN_KEYS = ConcurrentHashMap.newKeySet();
     private static volatile ResourceManager resourceManager = null;
@@ -38,23 +41,39 @@ public class StructureCache {
     private static final Map<Category, Integer> CATEGORY_CAPACITIES = new EnumMap<>(Category.class);
     private static boolean initialized = false;
     private static volatile boolean readOnly = false;
-
     private static long buildingTotalBytes = 0;
     private static int buildingFileCount = 0;
     private static long roomTotalBytes = 0;
     private static int roomFileCount = 0;
-
     private static final LongAdder cacheHits = new LongAdder();
     private static final LongAdder cacheMisses = new LongAdder();
     private static final LongAdder notFoundCount = new LongAdder();
     private static final LongAdder softEvictions = new LongAdder();
     private static final LongAdder diskReloads = new LongAdder();
 
+    private static void ensureInitialized() {
+        if (initialized && resourceManager != null && blockGetter != null) return;
+
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null) return;
+
+        resourceManager = server.getResourceManager();
+        blockGetter = server.registryAccess().lookupOrThrow(Registries.BLOCK);
+
+        if (!initialized) {
+            initializeCompiledCaches();
+            loadRawNbt(resourceManager);
+            initialized = true;
+
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [CACHE] Lazy initialization complete");
+            }
+        }
+    }
+
     public static void loadRawNbt(ResourceManager manager) {
-        resourceManager = manager;
         COMPRESSED_RAW_CACHE.clear();
         KNOWN_KEYS.clear();
-
         buildingTotalBytes = 0;
         buildingFileCount = 0;
         roomTotalBytes = 0;
@@ -90,11 +109,10 @@ public class StructureCache {
                     buildingFileCount++;
                 }
             } catch (Exception e) {
-                LOGGER.error("[CACHE] Failed to load raw structure: {}", location, e);
+                LOGGER.error("Error: [CACHE] Failed to load raw structure: {}", location, e);
             }
         }
-
-        LOGGER.info("[CACHE] Indexed {} raw NBT keys ({} buildings, {} rooms). Bytes held via SoftReference.",
+        LOGGER.info("Info: [CACHE] Indexed {} raw NBT keys ({} buildings, {} rooms)",
                 KNOWN_KEYS.size(), buildingFileCount, roomFileCount);
     }
 
@@ -106,7 +124,6 @@ public class StructureCache {
         RW_LOCK.writeLock().lock();
         try {
             if (initialized) return;
-
             int configuredBuildingSize = RorcikStructuresModConfig.buildingCacheSize > 0 ? RorcikStructuresModConfig.buildingCacheSize : 512;
             int configuredRoomSize = RorcikStructuresModConfig.roomCacheSize > 0 ? RorcikStructuresModConfig.roomCacheSize : 4096;
 
@@ -120,7 +137,6 @@ public class StructureCache {
                     }
                 }));
             }
-            initialized = true;
         } finally {
             RW_LOCK.writeLock().unlock();
         }
@@ -131,9 +147,6 @@ public class StructureCache {
         try {
             blockGetter = registryAccess.lookupOrThrow(Registries.BLOCK);
             initializeCompiledCaches();
-            for (Map<ResourceLocation, StructureTemplate> cache : CATEGORY_CACHES.values()) {
-                cache.clear();
-            }
             resetStats();
         } finally {
             RW_LOCK.writeLock().unlock();
@@ -151,7 +164,20 @@ public class StructureCache {
     }
 
     public static Optional<StructureTemplate> get(ResourceLocation location) {
-        if (!initialized) initializeCompiledCaches();
+        ensureInitialized();
+
+        if (blockGetter == null) {
+            if (RorcikStructuresModConfig.logCacheMisses) {
+                LOGGER.warn("Warn: [CACHE] blockGetter not yet available for: {}. Using fallback.", location);
+            }
+            return Optional.empty();
+        }
+
+        if (!initialized || resourceManager == null) {
+            LOGGER.error("Error: [CACHE] Not initialized for: {}. resourceManager={}",
+                    location, resourceManager != null);
+            return Optional.empty();
+        }
 
         Category cat = getCategoryFromPath(location.getPath());
         Map<ResourceLocation, StructureTemplate> targetCache = CATEGORY_CACHES.get(cat);
@@ -175,14 +201,12 @@ public class StructureCache {
                 cacheHits.increment();
                 return Optional.of(cached);
             }
-
             if (readOnly) {
                 if (RorcikStructuresModConfig.logCacheMisses) {
-                    LOGGER.warn("[CACHE] Miss in read-only mode: {} (Category: {})", location, cat);
+                    LOGGER.warn("Warn: [CACHE] Miss in read-only mode: {} (Category: {})", location, cat);
                 }
                 return compileOnDemandInternal(location, cat, targetCache);
             }
-
             cacheMisses.increment();
             return compileOnDemandInternal(location, cat, targetCache);
         } finally {
@@ -191,7 +215,9 @@ public class StructureCache {
     }
 
     public static void precompile(ResourceLocation location) {
-        if (!initialized) initializeCompiledCaches();
+        ensureInitialized();
+
+        if (!initialized || resourceManager == null || blockGetter == null) return;
 
         Category cat = getCategoryFromPath(location.getPath());
         Map<ResourceLocation, StructureTemplate> targetCache = CATEGORY_CACHES.get(cat);
@@ -200,22 +226,18 @@ public class StructureCache {
         RW_LOCK.writeLock().lock();
         try {
             if (targetCache.containsKey(location)) return;
-
             byte[] rawBytes = getRawBytes(location);
             if (rawBytes == null) {
                 notFoundCount.increment();
                 return;
             }
-
-            if (blockGetter == null) return;
-
             try {
                 CompoundTag nbt = NbtIo.readCompressed(new java.io.ByteArrayInputStream(rawBytes));
                 StructureTemplate template = new StructureTemplate();
                 template.load(blockGetter, nbt);
                 targetCache.put(location, template);
             } catch (Exception e) {
-                LOGGER.error("[CACHE] Failed to precompile: {}", location, e);
+                LOGGER.error("Error: [CACHE] Failed to precompile: {}", location, e);
             }
         } finally {
             RW_LOCK.writeLock().unlock();
@@ -223,14 +245,14 @@ public class StructureCache {
     }
 
     private static Optional<StructureTemplate> compileOnDemandInternal(ResourceLocation location, Category cat, Map<ResourceLocation, StructureTemplate> targetCache) {
+        if (blockGetter == null) {
+            return Optional.empty();
+        }
         byte[] rawBytes = getRawBytes(location);
         if (rawBytes == null) {
             notFoundCount.increment();
             return Optional.empty();
         }
-
-        if (blockGetter == null) return Optional.empty();
-
         try {
             CompoundTag nbt = NbtIo.readCompressed(new java.io.ByteArrayInputStream(rawBytes));
             StructureTemplate template = new StructureTemplate();
@@ -238,7 +260,7 @@ public class StructureCache {
             targetCache.put(location, template);
             return Optional.of(template);
         } catch (Exception e) {
-            LOGGER.error("[CACHE] Failed to compile on-demand: {}", location, e);
+            LOGGER.error("Error: [CACHE] Failed to compile on-demand: {}", location, e);
             return Optional.empty();
         }
     }
@@ -252,14 +274,20 @@ public class StructureCache {
         }
 
         ResourceManager rm = resourceManager;
-        if (rm == null) return null;
+        if (rm == null) {
+            ensureInitialized();
+            rm = resourceManager;
+            if (rm == null) {
+                LOGGER.error("Error: [CACHE] resourceManager still NULL after lazy init for: {}", location);
+                return null;
+            }
+        }
 
         String path = location.getPath();
         if (!path.endsWith(".nbt")) {
             path = path + ".nbt";
         }
         ResourceLocation resourceLocation = new ResourceLocation(location.getNamespace(), ModPaths.STRUCTURES_BASE + "/" + path);
-
         Optional<Resource> resource = rm.getResource(resourceLocation);
         if (resource.isEmpty()) return null;
 
@@ -269,9 +297,60 @@ public class StructureCache {
             diskReloads.increment();
             return rawBytes;
         } catch (Exception e) {
-            LOGGER.debug("[CACHE] Failed to reload from disk: {}", location, e);
+            LOGGER.debug("Info: [CACHE] Failed to reload from disk: {}", location, e);
             return null;
         }
+    }
+
+    public static Optional<ResourceLocation> getFallbackLocation(ResourceLocation failedLoc, Category cat, RandomSource random) {
+        ensureInitialized();
+
+        String namespace = failedLoc.getNamespace();
+        List<ResourceLocation> candidates = new ArrayList<>();
+
+        for (ResourceLocation key : KNOWN_KEYS) {
+            if (key.getNamespace().equals(namespace) && getCategoryFromPath(key.getPath()) == cat) {
+                candidates.add(key);
+            }
+        }
+
+        if (candidates.isEmpty()) return Optional.empty();
+
+        String path = failedLoc.getPath();
+        String failedFileName = path.substring(path.lastIndexOf('/') + 1).replace(".nbt", "");
+        String baseName;
+
+        if (failedFileName.matches(".*_\\d+$")) {
+            baseName = failedFileName.substring(0, failedFileName.lastIndexOf('_'));
+        } else {
+            baseName = failedFileName;
+        }
+
+        List<ResourceLocation> sameBase = candidates.stream()
+                .filter(loc -> {
+                    String candName = loc.getPath().substring(loc.getPath().lastIndexOf('/') + 1).replace(".nbt", "");
+                    if (candName.equals(failedFileName)) return false;
+                    if (failedFileName.matches(".*_\\d+$")) {
+                        return candName.startsWith(baseName + "_");
+                    } else {
+                        return true;
+                    }
+                })
+                .toList();
+
+        if (!sameBase.isEmpty()) {
+            return Optional.of(sameBase.get(random.nextInt(sameBase.size())));
+        }
+
+        List<ResourceLocation> sameCategoryOthers = candidates.stream()
+                .filter(loc -> !loc.equals(failedLoc))
+                .toList();
+
+        if (!sameCategoryOthers.isEmpty()) {
+            return Optional.of(sameCategoryOthers.get(random.nextInt(sameCategoryOthers.size())));
+        }
+
+        return Optional.empty();
     }
 
     public static void clearCategory(Category category) {
@@ -281,7 +360,7 @@ public class StructureCache {
             if (cache != null && !cache.isEmpty()) {
                 int size = cache.size();
                 cache.clear();
-                LOGGER.info("[CACHE] Cleared category {}: {} templates", category, size);
+                LOGGER.info("Cleanup: [CACHE] Cleared category {}: {} templates", category, size);
             }
         } finally {
             RW_LOCK.writeLock().unlock();
@@ -295,7 +374,7 @@ public class StructureCache {
                 int size = COMPRESSED_RAW_CACHE.size();
                 COMPRESSED_RAW_CACHE.clear();
                 KNOWN_KEYS.clear();
-                LOGGER.info("[CACHE] Released raw cache: {} entries", size);
+                LOGGER.info("Cleanup: [CACHE] Released raw cache: {} entries", size);
             }
         } finally {
             RW_LOCK.writeLock().unlock();
@@ -318,7 +397,7 @@ public class StructureCache {
             initialized = false;
             readOnly = false;
             resetStats();
-            LOGGER.info("[CACHE] Fully cleared and reset.");
+            LOGGER.info("Cleanup: [CACHE] Fully cleared and reset.");
         } finally {
             RW_LOCK.writeLock().unlock();
         }
@@ -328,15 +407,15 @@ public class StructureCache {
         long hits = cacheHits.sum();
         long misses = cacheMisses.sum();
         double hitRate = (hits + misses) > 0 ? (double) hits / (hits + misses) * 100 : 0;
-        LOGGER.info("[CACHE-STATS] Total: {} hits / {} misses ({}% hit rate)", hits, misses, String.format("%.1f", hitRate));
+        LOGGER.info("Info: [CACHE-STATS] Total: {} hits / {} misses ({}% hit rate)", hits, misses, String.format("%.1f", hitRate));
         long nf = notFoundCount.sum();
         if (nf > 0) {
-            LOGGER.warn("[CACHE-STATS] {} templates NOT FOUND", nf);
+            LOGGER.warn("Warn: [CACHE-STATS] {} templates NOT FOUND", nf);
         }
         long evictions = softEvictions.sum();
         long reloads = diskReloads.sum();
         if (evictions > 0 || reloads > 0) {
-            LOGGER.info("[CACHE-STATS] SoftReference evictions: {}, disk reloads: {}", evictions, reloads);
+            LOGGER.info("Info: [CACHE-STATS] SoftReference evictions: {}, disk reloads: {}", evictions, reloads);
         }
     }
 
@@ -346,5 +425,9 @@ public class StructureCache {
         notFoundCount.reset();
         softEvictions.reset();
         diskReloads.reset();
+    }
+
+    public static boolean isInitialized() {
+        return initialized && resourceManager != null && blockGetter != null;
     }
 }

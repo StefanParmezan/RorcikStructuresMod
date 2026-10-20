@@ -14,6 +14,7 @@ import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.RoadSegment;
 import ru.rorcik.structures.generation.StructureUtils;
+import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityProgressSavedData;
 
 import java.util.List;
 
@@ -37,14 +38,21 @@ public class RoadPlacer {
             BlockPos position,
             Rotation rotation,
             RandomSource random,
-            int forcedDecor
+            int forcedDecor,
+            int cityX,
+            int cityZ
     ) {
         RoadConfig config = RoadConfigLoader.getConfig(type);
-        if (config == null) {
-            return null;
-        }
-        if (network.hasSegmentAt(position)) {
-            return null;
+        if (config == null) return null;
+        if (network.hasSegmentAt(position)) return null;
+
+        CityProgressSavedData.CityProgress progress = CityProgressSavedData.get(level).getProgress(cityX, cityZ);
+        if (progress != null) {
+            for (CityProgressSavedData.RoadSegmentData seg : progress.roadSegments) {
+                if (seg.x() == position.getX() && seg.y() == position.getY() && seg.z() == position.getZ()) {
+                    return null;
+                }
+            }
         }
 
         int decorCount = config.decorCount();
@@ -57,22 +65,14 @@ public class RoadPlacer {
 
         List<Direction> connections = RoadNetwork.getRotatedConnections(config, rotation);
         RoadSegment segment = new RoadSegment(type, position, rotation, decor, connections);
-        if (!network.addSegment(segment)) {
-            return null;
-        }
-        placeRoad(level, segment, config);
-        return segment;
-    }
+        if (!network.addSegment(segment)) return null;
 
-    public static RoadSegment createAndPlaceRoad(
-            ServerLevel level,
-            RoadNetwork network,
-            String type,
-            BlockPos position,
-            Rotation rotation,
-            RandomSource random
-    ) {
-        return createAndPlaceRoad(level, network, type, position, rotation, random, -1);
+        placeRoad(level, segment, config);
+
+        CityProgressSavedData.get(level).addRoadSegment(cityX, cityZ,
+                new CityProgressSavedData.RoadSegmentData(type, position.getX(), position.getY(), position.getZ(), rotation.ordinal(), decor));
+
+        return segment;
     }
 
     static void placeRoad(ServerLevel level, RoadSegment segment, RoadConfig config) {
