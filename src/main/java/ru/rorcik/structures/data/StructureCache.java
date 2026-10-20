@@ -146,8 +146,23 @@ public class StructureCache {
         RW_LOCK.writeLock().lock();
         try {
             blockGetter = registryAccess.lookupOrThrow(Registries.BLOCK);
+
+            net.minecraft.server.MinecraftServer server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
+            if (server != null) {
+                resourceManager = server.getResourceManager();
+                if (KNOWN_KEYS.isEmpty()) {
+                    loadRawNbt(resourceManager);
+                }
+            }
+
             initializeCompiledCaches();
+            initialized = true;
             resetStats();
+
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [CACHE] Templates compiled successfully. resourceManager={}, blockGetter={}, initialized={}",
+                        resourceManager != null, blockGetter != null, initialized);
+            }
         } finally {
             RW_LOCK.writeLock().unlock();
         }

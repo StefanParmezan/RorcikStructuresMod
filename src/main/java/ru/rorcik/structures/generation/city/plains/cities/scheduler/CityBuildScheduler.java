@@ -184,7 +184,8 @@ public class CityBuildScheduler {
             task.setState(AnchorChunkTask.State.COMPLETED);
             totalTasksCompleted.incrementAndGet();
 
-            CityProgressSavedData.get(level).markTaskCompleted(task.centerX(), task.centerZ(), task.anchorChunkX(), task.anchorChunkZ());
+            CityJournal journal = CityJournal.load(task.centerX(), task.centerZ(), level);
+            journal.markTaskCompleted(task.anchorChunkX(), task.anchorChunkZ(), "ALL_PHASES");
 
             if (RorcikStructuresModConfig.enableLogging) {
                 LOGGER.info("Success: [SCHEDULER] Completed task {}", task);

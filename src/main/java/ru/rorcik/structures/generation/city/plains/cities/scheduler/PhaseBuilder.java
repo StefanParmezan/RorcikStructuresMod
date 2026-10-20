@@ -8,6 +8,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Rotation;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
+import ru.rorcik.structures.common.RorcikStructuresModConfig;
 import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.*;
 import ru.rorcik.structures.generation.city.plains.cities.buildings.BuildingGenerator;
@@ -47,7 +48,6 @@ public class PhaseBuilder {
         this.cityCenterZ = cityCenterZ;
         this.journal = CityJournal.load(cityCenterX, cityCenterZ, level);
     }
-
 
     public SlotWork buildForRoadNode(RoadNode node, BlockPos pos) {
         String slotId = "road_node@" + pos.getX() + "," + pos.getZ();
@@ -105,6 +105,13 @@ public class PhaseBuilder {
         RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
         if (entry == null) return;
 
+        if (journal.hasRoad(pos.getX(), pos.getY(), pos.getZ())) {
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [PHASE-BUILDER] Road already exists at {}, skipping", pos.toShortString());
+            }
+            return;
+        }
+
         RoadSegment segment = RoadPlacer.createAndPlaceRoad(
                 level, roadNetwork, entry.type(), pos, entry.rotation(),
                 createDeterministicRandom(pos), -1,
@@ -112,6 +119,7 @@ public class PhaseBuilder {
         );
 
         if (segment != null) {
+            journal.addRoad(pos.getX(), pos.getY(), pos.getZ(), entry.type(), entry.rotation().ordinal(), segment.decorVariant());
             RoadDecorationsPlacer.placeDecorationsForSingleRoad(
                     level, segment, createDeterministicRandom(pos)
             );
@@ -119,6 +127,13 @@ public class PhaseBuilder {
     }
 
     private void placeStraightRoad(BlockPos pos) {
+        if (journal.hasRoad(pos.getX(), pos.getY(), pos.getZ())) {
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [PHASE-BUILDER] Straight road already exists at {}, skipping", pos.toShortString());
+            }
+            return;
+        }
+
         Direction roadDir = detectRoadDirection(pos);
         if (roadDir == null) return;
         Rotation rotation = RoadPlacer.directionToRotation(roadDir);
@@ -139,12 +154,13 @@ public class PhaseBuilder {
         }
 
         RoadSegment segment = RoadPlacer.createAndPlaceRoad(
-                level, roadNetwork, roadTypeToPlace, pos, rotation, random, forcedDecor, cityCenterX, cityCenterZ
+                level, roadNetwork, roadTypeToPlace, pos, rotation, random, forcedDecor,
+                cityCenterX, cityCenterZ
         );
 
         if (segment != null) {
+            journal.addRoad(pos.getX(), pos.getY(), pos.getZ(), roadTypeToPlace, rotation.ordinal(), segment.decorVariant());
             roadNetwork.incrementStraightRoadCount();
-
             RoadDecorationsPlacer.placeDecorationsForSingleRoad(level, segment, random);
         }
     }
