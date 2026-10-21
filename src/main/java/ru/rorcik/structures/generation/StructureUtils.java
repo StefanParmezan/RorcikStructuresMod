@@ -87,13 +87,13 @@ public final class StructureUtils {
                 location = fallbackLoc;
                 templateOpt = StructureCache.get(location);
             } else {
-                LOGGER.error("Error: [PLACE] CRITICAL: No valid structure found in category {} for {}. Leaving area empty.", cat, nbtPath);
+                LOGGER.error("Error: [PLACE] CRITICAL: No valid structure found in category {} for {}. This will result in an empty area!", cat, nbtPath);
                 return;
             }
         }
 
         if (templateOpt.isEmpty()) {
-            LOGGER.error("Error: [PLACE] Fallback also failed to load for: {}", nbtPath);
+            LOGGER.error("Error: [PLACE] CRITICAL: Fallback also failed to load for: {}. Area will remain empty.", nbtPath);
             return;
         }
 

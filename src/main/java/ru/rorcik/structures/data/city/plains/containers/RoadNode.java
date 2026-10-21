@@ -29,6 +29,17 @@ public class RoadNode {
         }
     }
 
+    // >>> FIX: добавлен метод "direct" — используется при загрузке журнала,
+    // где направление уже сохранено как «сторона, откуда пришли».
+    // Без этого round-trip через journal инвертировал все entries
+    // и приводил к тому, что straight превращался в ST-дорогу,
+    // corner — в повёрнутый на 90°, T — в corner, cross — в T.
+    public void addEntryDirect(Direction entrySide) {
+        if (!this.entries.contains(entrySide)) {
+            this.entries.add(entrySide);
+        }
+    }
+
     public void addExit(Direction exitDir, RoadNode child) {
         if (!exitDirections.contains(exitDir)) {
             exitDirections.add(exitDir);
@@ -38,6 +49,14 @@ public class RoadNode {
 
     public void markTerminal() {
         isTerminal = true;
+    }
+
+    public List<Direction> getEntries() {
+        return entries;
+    }
+
+    public List<Direction> getExitDirections() {
+        return exitDirections;
     }
 
     public List<Direction> getAllConnections() {

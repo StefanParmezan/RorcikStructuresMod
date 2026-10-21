@@ -51,8 +51,33 @@ public class CityJournalWriter {
         WRITE_QUEUE.offer(journal);
     }
 
+    public static void forceWrite(CityJournal journal) {
+        WRITE_QUEUE.offer(journal);
+    }
+
+    /**
+     * Останавливает writer, но сначала ДРЕНит очередь — сохраняет
+     * все накопленные изменения. Иначе последние 5–15 секунд
+     * прогресса генерации терялись при выключении сервера.
+     */
     public static void shutdown() {
         running = false;
+
+        // >>> FIX: дреним очередь, чтобы не потерять последние save()
+        int drained = 0;
+        CityJournal remaining;
+        while ((remaining = WRITE_QUEUE.poll()) != null) {
+            try {
+                remaining.save();
+                drained++;
+            } catch (Exception e) {
+                LOGGER.error("Error: [JOURNAL-WRITER] Failed to flush on shutdown", e);
+            }
+        }
+        if (drained > 0 && RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("Info: [JOURNAL-WRITER] Flushed {} pending writes on shutdown", drained);
+        }
+
         WRITER_POOL.shutdown();
         try {
             if (!WRITER_POOL.awaitTermination(5, TimeUnit.SECONDS)) {

@@ -35,7 +35,8 @@ public class PhaseBuilder {
     public PhaseBuilder(ServerLevel level, RoadNetwork roadNetwork, RandomSource baseRandom,
                         List<BuildingSlot> slots, int baseY,
                         Map<BlockPos, RoadNode> nodeMap, Set<BlockPos> straightPositions,
-                        int cityCenterX, int cityCenterZ) {
+                        int cityCenterX, int cityCenterZ,
+                        CityJournal journal) {
         this.level = level;
         this.roadNetwork = roadNetwork;
         this.baseRandom = baseRandom;
@@ -46,80 +47,77 @@ public class PhaseBuilder {
         for (BuildingSlot slot : slots) slotMap.put(slot.position(), slot);
         this.cityCenterX = cityCenterX;
         this.cityCenterZ = cityCenterZ;
-        this.journal = CityJournal.load(cityCenterX, cityCenterZ, level);
+        // >>> FIX: принимаем уже загруженный журнал из CityBuildScheduler,
+        // а не грузим с диска заново. Раньше здесь был CityJournal.load(...)
+        // создававший второй независимый инстанс — рассинхрон hasRoadAt.
+        this.journal = journal;
     }
 
     public SlotWork buildForRoadNode(RoadNode node, BlockPos pos) {
-        String slotId = "road_node@" + pos.getX() + "," + pos.getZ();
+        int anchorChunkX = (pos.getX() >> 6) << 2;
+        int anchorChunkZ = (pos.getZ() >> 6) << 2;
+        String slotId = anchorChunkX + "," + anchorChunkZ + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
         List<Phase> phases = new ArrayList<>();
         phases.add(new Phase(PhaseType.ROAD, () -> placeRoadForNode(node, pos), collectRoadTemplatesForNode(node)));
-        return new SlotWork(slotId, phases);
+        return new SlotWork(slotId, "ROAD_NODE", phases);
     }
 
     public SlotWork buildForStraightRoad(BlockPos pos) {
-        String slotId = "road_straight@" + pos.getX() + "," + pos.getZ();
+        int anchorChunkX = (pos.getX() >> 6) << 2;
+        int anchorChunkZ = (pos.getZ() >> 6) << 2;
+        String slotId = anchorChunkX + "," + anchorChunkZ + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
         List<Phase> phases = new ArrayList<>();
         phases.add(new Phase(PhaseType.ROAD, () -> placeStraightRoad(pos), collectStraightRoadTemplates()));
-        return new SlotWork(slotId, phases);
+        return new SlotWork(slotId, "STRAIGHT_ROAD", phases);
     }
 
     public SlotWork buildForBuildingSlot(BuildingSlot slot) {
-        String slotId = slot.category() + "@" + slot.position().getX() + "," + slot.position().getZ();
+        BlockPos pos = slot.position();
+        int anchorChunkX = (pos.getX() >> 6) << 2;
+        int anchorChunkZ = (pos.getZ() >> 6) << 2;
+        String slotId = anchorChunkX + "," + anchorChunkZ + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
         List<Phase> phases = new ArrayList<>();
         String category = slot.category();
-
         if ("houses".equals(category)) {
             phases.add(new Phase(PhaseType.HOUSE_SHELL,
-                    () -> {
-                        BuildingPlacer.placeBuildingShell(level, slot);
-                        journal.markTaskCompleted(slot.position().getX() >> 6, slot.position().getZ() >> 6, "HOUSE_SHELL");
-                    },
+                    () -> BuildingPlacer.placeBuildingShell(level, slot),
                     BuildingGenerator.collectRequiredBuildTemplates(List.of(slot))));
             phases.add(new Phase(PhaseType.INSTALL,
                     () -> {},
                     Collections.emptySet()));
             phases.add(new Phase(PhaseType.ROOMS,
-                    () -> {
-                        BuildingPlacer.placeHouseRoomsOnly(level, slot, createDeterministicRandom(slot.position()));
-                        journal.markTaskCompleted(slot.position().getX() >> 6, slot.position().getZ() >> 6, "ROOMS");
-                    },
+                    () -> BuildingPlacer.placeHouseRoomsOnly(level, slot, createDeterministicRandom(slot.position())),
                     BuildingGenerator.collectRequiredRoomTemplates(List.of(slot))));
             phases.add(new Phase(PhaseType.SIDEWALKS,
                     () -> SidewalkPlacer.placeSidewalkForSlot(level, slot, createDeterministicRandom(slot.position())),
                     SidewalkPlacer.collectRequiredTemplates()));
         } else if ("parks".equals(category) || "platforms".equals(category) || "other".equals(category) || "lootable".equals(category)) {
             phases.add(new Phase(PhaseType.INSTALL,
-                    () -> {
-                        BuildingPlacer.placeBuilding(level, slot);
-                        journal.markTaskCompleted(slot.position().getX() >> 6, slot.position().getZ() >> 6, "INSTALL");
-                    },
+                    () -> BuildingPlacer.placeBuilding(level, slot),
                     BuildingGenerator.collectRequiredBuildTemplates(List.of(slot))));
         }
-
-        return new SlotWork(slotId, phases);
+        return new SlotWork(slotId, "BUILDING", phases);
     }
 
     private void placeRoadForNode(RoadNode node, BlockPos pos) {
-        List<Direction> connections = node.getAllConnections();
-        if (connections.isEmpty()) return;
-        RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
-        if (entry == null) return;
-
-        if (journal.hasRoad(pos.getX(), pos.getY(), pos.getZ())) {
+        if (journal.hasRoadAt(pos.getX(), pos.getY(), pos.getZ())) {
             if (RorcikStructuresModConfig.enableLogging) {
                 LOGGER.info("Info: [PHASE-BUILDER] Road already exists at {}, skipping", pos.toShortString());
             }
             return;
         }
 
+        List<Direction> connections = node.getAllConnections();
+        if (connections.isEmpty()) return;
+        RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
+        if (entry == null) return;
+
         RoadSegment segment = RoadPlacer.createAndPlaceRoad(
                 level, roadNetwork, entry.type(), pos, entry.rotation(),
-                createDeterministicRandom(pos), -1,
-                cityCenterX, cityCenterZ
+                createDeterministicRandom(pos), -1
         );
 
         if (segment != null) {
-            journal.addRoad(pos.getX(), pos.getY(), pos.getZ(), entry.type(), entry.rotation().ordinal(), segment.decorVariant());
             RoadDecorationsPlacer.placeDecorationsForSingleRoad(
                     level, segment, createDeterministicRandom(pos)
             );
@@ -127,7 +125,7 @@ public class PhaseBuilder {
     }
 
     private void placeStraightRoad(BlockPos pos) {
-        if (journal.hasRoad(pos.getX(), pos.getY(), pos.getZ())) {
+        if (journal.hasRoadAt(pos.getX(), pos.getY(), pos.getZ())) {
             if (RorcikStructuresModConfig.enableLogging) {
                 LOGGER.info("Info: [PHASE-BUILDER] Straight road already exists at {}, skipping", pos.toShortString());
             }
@@ -154,12 +152,10 @@ public class PhaseBuilder {
         }
 
         RoadSegment segment = RoadPlacer.createAndPlaceRoad(
-                level, roadNetwork, roadTypeToPlace, pos, rotation, random, forcedDecor,
-                cityCenterX, cityCenterZ
+                level, roadNetwork, roadTypeToPlace, pos, rotation, random, forcedDecor
         );
 
         if (segment != null) {
-            journal.addRoad(pos.getX(), pos.getY(), pos.getZ(), roadTypeToPlace, rotation.ordinal(), segment.decorVariant());
             roadNetwork.incrementStraightRoadCount();
             RoadDecorationsPlacer.placeDecorationsForSingleRoad(level, segment, random);
         }

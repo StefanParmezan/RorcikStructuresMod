@@ -12,6 +12,7 @@ import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.data.city.plains.config_loaders.*;
 import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityBuildScheduler;
 import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityGenerationContextRegistry;
+import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityJournalWriter;
 import ru.rorcik.structures.generation.city.plains.cities.scheduler.PlayerProximityTracker;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -38,6 +39,10 @@ public class ModReloadListener {
         CityBuildScheduler.reset();
         CityGenerationContextRegistry.clear();
         PlayerProximityTracker.reset();
+
+        // >>> FIX: обязательно дреним очередь journal writer'а на shutdown,
+        // иначе теряются последние 5–15 секунд прогресса генерации.
+        CityJournalWriter.shutdown();
     }
 
     private static class StructureDataReloader implements PreparableReloadListener {

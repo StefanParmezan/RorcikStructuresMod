@@ -51,6 +51,9 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.BooleanValue PLAINS_PARK_ONLY_RECT;
     public static final ForgeConfigSpec.IntValue PLAINS_CHUNK_LOAD_RADIUS;
 
+    // >>> FIX: новое поле конфига
+    public static final ForgeConfigSpec.IntValue PLAINS_MIN_TERMINAL_DISTANCE;
+
     public static final ForgeConfigSpec.IntValue DESERT_BUILDING_COUNT;
     public static final ForgeConfigSpec.IntValue DESERT_STEP_MIN;
     public static final ForgeConfigSpec.IntValue DESERT_STEP_MAX;
@@ -66,7 +69,6 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.BooleanValue ENABLE_ROAD_DECORATIONS;
 
     static {
-        
         BUILDER.comment("General mod settings").push("general");
         DEBUG_MODE = BUILDER
                 .comment("Enable debug mode (extra logging and checks)")
@@ -178,6 +180,16 @@ public class RorcikStructuresModConfig {
         PLAINS_CHUNK_LOAD_RADIUS = BUILDER
                 .comment("Radius (in chunks) around city to force-load")
                 .defineInRange("chunkLoadRadius", 4, 1, 16);
+
+        // >>> FIX: минимальное расстояние от центра, ближе которого дорога
+        // не может терминироваться (st-дорога не появится в середине города).
+        PLAINS_MIN_TERMINAL_DISTANCE = BUILDER
+                .comment(
+                        "Minimum distance (in blocks) from city center before a road can terminate (st road).",
+                        "Prevents stop-roads appearing in the middle of the city.",
+                        "Default 400 ~ 6 * roadStep."
+                )
+                .defineInRange("minTerminalDistance", 400, 64, 2048);
         BUILDER.pop();
 
         BUILDER.comment("Desert city generation settings").push("desert_city");
@@ -266,6 +278,9 @@ public class RorcikStructuresModConfig {
     public static boolean plainsParkOnlyRect;
     public static int plainsChunkLoadRadius;
 
+    // >>> FIX
+    public static int plainsMinTerminalDistance;
+
     public static int desertBuildingCount;
     public static int desertStepMin;
     public static int desertStepMax;
@@ -328,6 +343,9 @@ public class RorcikStructuresModConfig {
         plainsSpawnParks = PLAINS_SPAWN_PARKS.get();
         plainsParkOnlyRect = PLAINS_PARK_ONLY_RECT.get();
         plainsChunkLoadRadius = PLAINS_CHUNK_LOAD_RADIUS.get();
+
+        // >>> FIX
+        plainsMinTerminalDistance = PLAINS_MIN_TERMINAL_DISTANCE.get();
 
         desertBuildingCount = DESERT_BUILDING_COUNT.get();
         desertStepMin = DESERT_STEP_MIN.get();

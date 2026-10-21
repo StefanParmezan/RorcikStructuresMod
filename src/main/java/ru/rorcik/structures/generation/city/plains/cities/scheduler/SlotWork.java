@@ -1,27 +1,23 @@
 package ru.rorcik.structures.generation.city.plains.cities.scheduler;
 
-import java.util.ArrayList;
-import java.util.Comparator;
+import net.minecraft.resources.ResourceLocation;
+
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
-public class SlotWork {
-    private final String slotId;
-    private final List<Phase> phases;
-    private int currentPhaseIndex = 0;
-
-    public SlotWork(String slotId, List<Phase> phases) {
+public record SlotWork(String slotId, String slotType, List<Phase> phases) {
+    public SlotWork(String slotId, String slotType, List<Phase> phases) {
         this.slotId = slotId;
-        this.phases = new ArrayList<>(phases);
-        this.phases.sort(Comparator.comparingInt(p -> p.type().order()));
+        this.slotType = slotType;
+        this.phases = phases != null ? phases : Collections.emptyList();
     }
 
-    public String slotId() { return slotId; }
-    public List<Phase> phases() { return phases; }
-    public boolean hasNextPhase() { return currentPhaseIndex < phases.size(); }
-    public Phase nextPhase() {
-        if (!hasNextPhase()) throw new IllegalStateException("No more phases for slot " + slotId);
-        return phases.get(currentPhaseIndex++);
+    public SlotWork(String slotId, Phase phase) {
+        this(slotId, "UNKNOWN", phase != null ? List.of(phase) : Collections.emptyList());
     }
-    public boolean isComplete() { return currentPhaseIndex >= phases.size(); }
-    public void reset() { currentPhaseIndex = 0; }
+
+    public SlotWork(String slotId, Phase phase, Set<ResourceLocation> templates) {
+        this(slotId, "UNKNOWN", phase != null ? List.of(new Phase(phase.type(), phase.action(), templates)) : Collections.emptyList());
+    }
 }

@@ -21,7 +21,10 @@ public class RoadGraphBuilder {
             Map<BlockPos, RoadNode> nodeMap,
             Set<BlockPos> straightPositions
     ) {
-        return buildGraphRecursive(random, startPos, direction, direction, depth, nodeMap, straightPositions);
+        // >>> FIX: передаём origin (центр города) в рекурсию, чтобы можно было
+        // запретить терминацию внутри города по расстоянию до центра.
+        return buildGraphRecursive(random, startPos, direction, direction, depth,
+                nodeMap, straightPositions, startPos);
     }
 
     private static RoadNode buildGraphRecursive(
@@ -31,7 +34,8 @@ public class RoadGraphBuilder {
             Direction initialDirection,
             int depth,
             Map<BlockPos, RoadNode> nodeMap,
-            Set<BlockPos> straightPositions
+            Set<BlockPos> straightPositions,
+            BlockPos origin
     ) {
         if (depth > GeneratorConfig.MAX_GRAPH_DEPTH || nodeMap.size() >= GeneratorConfig.MAX_NODES) {
             RoadNode deadEnd = new RoadNode(startPos, direction, depth);
@@ -51,7 +55,7 @@ public class RoadGraphBuilder {
             return existing;
         }
 
-        int exitChoice = chooseExitWithDepth(random, depth);
+        int exitChoice = chooseExitWithDepth(random, depth, startPos, origin);
         RoadNode node = new RoadNode(startPos, direction, depth);
         nodeMap.put(startPos, node);
 
@@ -83,7 +87,8 @@ public class RoadGraphBuilder {
 
             BlockPos childPos = RoadNetwork.getNextPosition(currentPos, exit, GeneratorConfig.ROAD_STEP);
 
-            RoadNode child = buildGraphRecursive(random, childPos, exit, initialDirection, depth + 1, nodeMap, straightPositions);
+            RoadNode child = buildGraphRecursive(random, childPos, exit, initialDirection,
+                    depth + 1, nodeMap, straightPositions, origin);
 
             if (child != node) {
                 node.addExit(exit, child);
@@ -93,9 +98,39 @@ public class RoadGraphBuilder {
         return node;
     }
 
-    static int chooseExitWithDepth(RandomSource random, int depth) {
-        double endChance = (double) depth / GeneratorConfig.MAX_GRAPH_DEPTH;
+    /**
+     * Выбор стратегии выхода из узла:
+     *  0 = терминал (st-дорога, переход в ландшафт)
+     *  1..6 = продолжение (см. getExitsForChoice)
+     *
+     * Терминал запрещён:
+     *  - на глубине 0 и 1 (принудительно продолжаем — иначе стоп-дороги
+     *    появляются прямо у центра города)
+     *  - если узел ближе чем MIN_TERMINAL_DISTANCE к origin
+     *    (защита от преждевременной терминации на длинных диагоналях)
+     */
+    static int chooseExitWithDepth(RandomSource random, int depth, BlockPos pos, BlockPos origin) {
+        // На максимальной глубине — терминал форсированно.
+        if (depth >= GeneratorConfig.MAX_GRAPH_DEPTH) {
+            return 0;
+        }
 
+        // Внутри «ядра» города — всегда продолжаем.
+        if (depth < 2) {
+            return 1 + random.nextInt(6);
+        }
+
+        // По расстоянию до центра — не терминалим близко к центру.
+        int dx = pos.getX() - origin.getX();
+        int dz = pos.getZ() - origin.getZ();
+        long distSq = (long) dx * dx + (long) dz * dz;
+        long minDist = GeneratorConfig.MIN_TERMINAL_DISTANCE;
+        if (distSq < minDist * minDist) {
+            return 1 + random.nextInt(6);
+        }
+
+        // На периметре — обычная вероятностная модель.
+        double endChance = (double) depth / GeneratorConfig.MAX_GRAPH_DEPTH;
         if (random.nextDouble() < endChance) {
             return 0;
         }

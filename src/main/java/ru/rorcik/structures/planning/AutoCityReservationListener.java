@@ -49,18 +49,22 @@ public class AutoCityReservationListener {
         LOGGER.info("Info: ==================================================");
         LOGGER.info("Info: [AUTO-RESERVE] Server and Cache ready for world {}. Attempting to reserve city at X: {}, Z: {}", worldId, TEST_X, TEST_Z);
 
-        PlayerProximityTracker.reset();
-        CityGenerationContextRegistry.clear();
-        ZoneRegistrySavedData registry = ZoneRegistrySavedData.get(level);
-        registry.clearAllZones();
+        try {
+            PlayerProximityTracker.reset();
+            CityGenerationContextRegistry.clear();
+            ZoneRegistrySavedData registry = ZoneRegistrySavedData.get(level);
+            registry.clearAllZones();
 
-        LOGGER.info("Cleanup: [AUTO-RESERVE] Old data cleared");
+            LOGGER.info("Cleanup: [AUTO-RESERVE] Old data cleared");
 
-        boolean success = CityZonePlanner.tryReserveCity(level, TEST_X, TEST_Z, CityType.PLAINS);
-        if (!success) {
-            LOGGER.error("Error: [AUTO-RESERVE] Failed to reserve city zone");
-        } else {
-            LOGGER.info("Success: [AUTO-RESERVE] City zone prepared and ready");
+            boolean success = CityZonePlanner.tryReserveCity(level, TEST_X, TEST_Z, CityType.PLAINS);
+            if (!success) {
+                LOGGER.error("Error: [AUTO-RESERVE] Failed to reserve city zone");
+            } else {
+                LOGGER.info("Success: [AUTO-RESERVE] City zone prepared and ready");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error: [AUTO-RESERVE] Exception during city reservation: {}", e.getMessage(), e);
         }
 
         LOGGER.info("Info: ==================================================");

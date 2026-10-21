@@ -27,6 +27,7 @@ import ru.rorcik.structures.generation.city.plains.cities.roads.RoadGraphBuilder
 import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityGenerationContext;
 import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityGenerationContextRegistry;
 import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityGenerationSavedData;
+import ru.rorcik.structures.generation.city.plains.cities.scheduler.CityJournal;
 import ru.rorcik.structures.generation.city.plains.cities.scheduler.PlayerProximityTracker;
 
 import java.util.*;
@@ -35,60 +36,108 @@ public class CityZonePlanner {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     public static boolean tryReserveCity(ServerLevel level, int centerX, int centerZ, CityType type) {
-        if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Info: [CITY-PLANNER] Reserving zone for {} city at [{}, {}]", type.id, centerX, centerZ);
-        }
+        try {
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [CITY-PLANNER] Reserving zone for {} city at [{}, {}]", type.id, centerX, centerZ);
+            }
 
-        BlockPos checkPos = new BlockPos(centerX, level.getSeaLevel(), centerZ);
-        Holder<Biome> biomeHolder = level.getBiome(checkPos);
-        ResourceLocation biomeId = biomeHolder.unwrapKey().map(k -> k.location()).orElse(null);
-        if (biomeId == null) {
-            LOGGER.warn("Warn: [CITY-PLANNER] Failed to get biome ID at [{}, {}]", centerX, centerZ);
+            BlockPos checkPos = new BlockPos(centerX, level.getSeaLevel(), centerZ);
+            Holder<Biome> biomeHolder = level.getBiome(checkPos);
+            ResourceLocation biomeId = biomeHolder.unwrapKey().map(k -> k.location()).orElse(null);
+            if (biomeId == null) {
+                LOGGER.warn("Warn: [CITY-PLANNER] Failed to get biome ID at [{}, {}]", centerX, centerZ);
+                return false;
+            }
+            TemperatureZone currentZone = getBiomeTemperatureZone(biomeId, biomeHolder.value());
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [CITY-PLANNER] Biome: {} | Zone: {}", biomeId, currentZone);
+            }
+            if (currentZone == null || !type.allowedZones.contains(currentZone)) {
+                LOGGER.warn("Warn: [CITY-PLANNER] Biome not suitable for type {}", type.id);
+                return false;
+            }
+
+            ZoneRegistrySavedData registry = ZoneRegistrySavedData.get(level);
+            boolean reserved = registry.tryReserveZone(centerX, centerZ, type.toZoneRules());
+            if (!reserved) {
+                LOGGER.warn("Warn: [CITY-PLANNER] Zone already occupied");
+                return false;
+            }
+
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Success: [CITY-PLANNER] Zone reserved");
+            }
+
+            DryRunResult dryRun = performDryRun(level, centerX, centerZ, type.targetHeight);
+            Set<Long> affectedChunks = calculateExactChunks(dryRun);
+
+            CityJournal journal = CityJournal.load(centerX, centerZ, level);
+            journal.initializeCity(dryRun.seed, dryRun.baseY, type.targetHeight);
+
+            int roadNodeCount = 0;
+            for (Map.Entry<BlockPos, RoadNode> entry : dryRun.nodeMap.entrySet()) {
+                BlockPos pos = entry.getKey();
+                RoadNode node = entry.getValue();
+                int anchorChunkX = (pos.getX() >> 6) << 2;
+                int anchorChunkZ = (pos.getZ() >> 6) << 2;
+                journal.addRoadNode(anchorChunkX, anchorChunkZ, node);
+                roadNodeCount++;
+            }
+
+            int straightRoadCount = 0;
+            for (BlockPos pos : dryRun.straightPositions) {
+                int anchorChunkX = (pos.getX() >> 6) << 2;
+                int anchorChunkZ = (pos.getZ() >> 6) << 2;
+                journal.addStraightRoad(anchorChunkX, anchorChunkZ, pos);
+                straightRoadCount++;
+            }
+
+            int buildingSlotCount = 0;
+            for (BuildingSlot slot : dryRun.slots) {
+                BlockPos pos = slot.position();
+                int anchorChunkX = (pos.getX() >> 6) << 2;
+                int anchorChunkZ = (pos.getZ() >> 6) << 2;
+                journal.addSlot(anchorChunkX, anchorChunkZ, slot);
+                buildingSlotCount++;
+            }
+
+            journal.setRoadNetworkData(dryRun.roadNetwork);
+
+            // >>> FIX: персистим журнал на диск ДО регистрации контекста.
+            // Без этого CityBuildScheduler.startCityGeneration позже не найдёт файл
+            // и получит seed=0 (баг, из-за которого город не спавнился).
+            journal.save();
+
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [CITY-PLANNER] Recorded to journal: {} road nodes, {} straight roads, {} building slots, seed={}",
+                        roadNodeCount, straightRoadCount, buildingSlotCount, dryRun.seed);
+                LOGGER.info("Info: [CITY-PLANNER] Journal persisted to disk");
+            }
+
+            CityGenerationContext context = new CityGenerationContext(
+                    centerX, centerZ, type.id, type.targetHeight,
+                    dryRun.nodeMap, dryRun.straightPositions, dryRun.slots,
+                    dryRun.roadNetwork, dryRun.seed, dryRun.baseY
+            );
+            CityGenerationContextRegistry.register(context);
+
+            CityGenerationSavedData genData = CityGenerationSavedData.get(level);
+            genData.registerCity(centerX, centerZ, type.targetHeight);
+
+            MinecraftForge.EVENT_BUS.post(new ZoneEvents.ZoneReservedEvent(
+                    centerX, centerZ, type.toZoneRules(), type.targetHeight, affectedChunks
+            ));
+
+            PlayerProximityTracker.registerCity(centerX, centerZ, affectedChunks);
+
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [CITY-PLANNER] City fully prepared. Waiting for player...");
+            }
+            return true;
+        } catch (Exception e) {
+            LOGGER.error("Error: [CITY-PLANNER] Exception in tryReserveCity at [{}, {}]: {}", centerX, centerZ, e.getMessage(), e);
             return false;
         }
-        TemperatureZone currentZone = getBiomeTemperatureZone(biomeId, biomeHolder.value());
-        if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Info: [CITY-PLANNER] Biome: {} | Zone: {}", biomeId, currentZone);
-        }
-        if (currentZone == null || !type.allowedZones.contains(currentZone)) {
-            LOGGER.warn("Warn: [CITY-PLANNER] Biome not suitable for type {}", type.id);
-            return false;
-        }
-
-        ZoneRegistrySavedData registry = ZoneRegistrySavedData.get(level);
-        boolean reserved = registry.tryReserveZone(centerX, centerZ, type.toZoneRules());
-        if (!reserved) {
-            LOGGER.warn("Warn: [CITY-PLANNER] Zone already occupied");
-            return false;
-        }
-
-        if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Success: [CITY-PLANNER] Zone reserved");
-        }
-
-        DryRunResult dryRun = performDryRun(level, centerX, centerZ, type.targetHeight);
-        Set<Long> affectedChunks = calculateExactChunks(dryRun);
-
-        CityGenerationContext context = new CityGenerationContext(
-                centerX, centerZ, type.id, type.targetHeight,
-                dryRun.nodeMap, dryRun.straightPositions, dryRun.slots,
-                dryRun.roadNetwork, dryRun.seed, dryRun.baseY
-        );
-        CityGenerationContextRegistry.register(context);
-
-        CityGenerationSavedData genData = CityGenerationSavedData.get(level);
-        genData.registerCity(centerX, centerZ, type.targetHeight);
-
-        MinecraftForge.EVENT_BUS.post(new ZoneEvents.ZoneReservedEvent(
-                centerX, centerZ, type.toZoneRules(), type.targetHeight, affectedChunks
-        ));
-
-        PlayerProximityTracker.registerCity(centerX, centerZ, affectedChunks);
-
-        if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Info: [CITY-PLANNER] City fully prepared. Waiting for player...");
-        }
-        return true;
     }
 
     public static CityGenerationContext rebuildContext(ServerLevel level, int centerX, int centerZ) {
@@ -107,10 +156,38 @@ public class CityZonePlanner {
             return null;
         }
 
-        if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Info: [CITY-PLANNER] Rebuilding context for city at [{}, {}] with targetHeight {}", centerX, centerZ, state.targetHeight());
+        CityJournal journal = CityJournal.load(centerX, centerZ, level);
+        if (journal.getSeed() != 0) {
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [CITY-PLANNER] Rebuilding context from journal for city at [{}, {}] with seed={}", centerX, centerZ, journal.getSeed());
+            }
+            RoadNetwork roadNetwork = journal.restoreRoadNetwork();
+            Map<BlockPos, RoadNode> nodeMap = new HashMap<>();
+            for (CityJournal.RoadNodeData nodeData : journal.getAllRoadNodes().values()) {
+                RoadNode node = nodeData.toRoadNode();
+                nodeMap.put(node.position(), node);
+            }
+            Set<BlockPos> straightPositions = new HashSet<>();
+            for (CityJournal.StraightRoadData roadData : journal.getAllStraightRoads().values()) {
+                straightPositions.add(roadData.toBlockPos());
+            }
+            List<BuildingSlot> slots = new ArrayList<>();
+            for (CityJournal.SlotData slotData : journal.getPendingSlots()) {
+                slots.add(slotData.toBuildingSlot());
+            }
+
+            CityGenerationContext context = new CityGenerationContext(
+                    centerX, centerZ, "plains", state.targetHeight(),
+                    nodeMap, straightPositions, slots,
+                    roadNetwork, journal.getSeed(), journal.getBaseY()
+            );
+            CityGenerationContextRegistry.register(context);
+            return context;
         }
 
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("Info: [CITY-PLANNER] Rebuilding context via dry run for city at [{}, {}]", centerX, centerZ);
+        }
         DryRunResult dryRun = performDryRun(level, centerX, centerZ, state.targetHeight());
 
         CityGenerationContext context = new CityGenerationContext(
@@ -119,14 +196,26 @@ public class CityZonePlanner {
                 dryRun.roadNetwork, dryRun.seed, dryRun.baseY
         );
         CityGenerationContextRegistry.register(context);
+
+        // >>> FIX: сохраняем восстановленный журнал, иначе при следующем рестарте
+        // сервера journal снова окажется с seed=0 и dry run будет выполняться заново.
+        CityJournal rebuiltJournal = CityJournal.load(centerX, centerZ, level);
+        if (rebuiltJournal.getSeed() == 0) {
+            rebuiltJournal.rebuildFromContext(context);
+            rebuiltJournal.save();
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [CITY-PLANNER] Rebuilt journal persisted for city at [{}, {}]", centerX, centerZ);
+            }
+        }
+
         return context;
     }
 
     private static DryRunResult performDryRun(ServerLevel level, int centerX, int centerZ, int targetHeight) {
-        int baseY = targetHeight != -1 ? targetHeight : level.getHeight(Heightmap.Types.WORLD_SURFACE, centerX, centerZ);
+        int baseY = targetHeight != -1 ? targetHeight : level.getSeaLevel();
         BlockPos origin = new BlockPos(centerX, baseY, centerZ);
 
-        long deterministicSeed = level.getSeed() ^ ((long) centerX << 32) | (centerZ & 0xFFFFFFFFL);
+        long deterministicSeed = level.getSeed() ^ (((long) centerX << 32) | (centerZ & 0xFFFFFFFFL));
         RandomSource random = RandomSource.create(deterministicSeed);
 
         Map<BlockPos, RoadNode> nodeMap = new HashMap<>();

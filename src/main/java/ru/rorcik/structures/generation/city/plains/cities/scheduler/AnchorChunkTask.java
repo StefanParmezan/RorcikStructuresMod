@@ -13,18 +13,21 @@ public class AnchorChunkTask {
     private final int anchorChunkZ;
     private final int cityCenterX;
     private final int cityCenterZ;
+    private final String cityId;
     private final List<SlotWork> slotWorks;
     private final CompletableFuture<Void> completion = new CompletableFuture<>();
     private final AtomicInteger completedPhases = new AtomicInteger(0);
     private final int totalPhases;
     private volatile State state = State.PENDING;
     private volatile int priority;
+    private final AtomicInteger retryCount = new AtomicInteger(0);
 
     public AnchorChunkTask(int anchorChunkX, int anchorChunkZ, List<SlotWork> slotWorks, int cityCenterX, int cityCenterZ) {
         this.anchorChunkX = anchorChunkX;
         this.anchorChunkZ = anchorChunkZ;
         this.cityCenterX = cityCenterX;
         this.cityCenterZ = cityCenterZ;
+        this.cityId = "city@" + cityCenterX + "," + cityCenterZ;
         this.slotWorks = new ArrayList<>(slotWorks);
         this.slotWorks.sort(Comparator.comparing(sw -> {
             if (sw.phases().isEmpty()) return Integer.MAX_VALUE;
@@ -42,6 +45,7 @@ public class AnchorChunkTask {
     public int anchorChunkZ() { return anchorChunkZ; }
     public int centerX() { return cityCenterX; }
     public int centerZ() { return cityCenterZ; }
+    public String cityId() { return cityId; }
     public int anchorBlockX() { return anchorChunkX << 4; }
     public int anchorBlockZ() { return anchorChunkZ << 4; }
     public List<SlotWork> slotWorks() { return slotWorks; }
@@ -67,6 +71,10 @@ public class AnchorChunkTask {
     public int completedPhases() { return completedPhases.get(); }
     public void incrementCompletedPhases() { completedPhases.incrementAndGet(); }
 
+    public int incrementRetryCount() { return retryCount.incrementAndGet(); }
+    public int getRetryCount() { return retryCount.get(); }
+    public void resetRetryCount() { retryCount.set(0); }
+
     public boolean containsBlock(int blockX, int blockZ) {
         int minX = anchorChunkX << 4;
         int minZ = anchorChunkZ << 4;
@@ -80,8 +88,8 @@ public class AnchorChunkTask {
 
     @Override
     public String toString() {
-        return String.format("AnchorChunkTask[%d,%d -> %d,%d | slots=%d | phases=%d/%d | state=%s | priority=%d]",
+        return String.format("AnchorChunkTask[%d,%d -> %d,%d | slots=%d | phases=%d/%d | state=%s | priority=%d | retries=%d]",
                 anchorChunkX, anchorChunkZ, anchorChunkX + 3, anchorChunkZ + 3,
-                slotWorks.size(), completedPhases.get(), totalPhases, state, priority);
+                slotWorks.size(), completedPhases.get(), totalPhases, state, priority, retryCount.get());
     }
 }

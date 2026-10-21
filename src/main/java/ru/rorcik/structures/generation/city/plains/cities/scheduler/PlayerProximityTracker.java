@@ -115,7 +115,12 @@ public class PlayerProximityTracker {
                                 city.cityId, distance, bufferDistance);
                     }
                     city.state = CityState.GENERATING;
-                    startGeneration(city, level, playerX, playerZ);
+                    // >>> FIX: если старт провалился (например, нет контекста),
+                    // откатываем обратно в PENDING, чтобы попробовать позже.
+                    if (!startGeneration(city, level, playerX, playerZ)) {
+                        LOGGER.warn("Warn: [PROXIMITY] startGeneration failed for '{}', reverting to PENDING", city.cityId);
+                        city.state = CityState.PENDING;
+                    }
                 }
                 break;
             case GENERATING:
@@ -134,7 +139,11 @@ public class PlayerProximityTracker {
                         LOGGER.info("Info: [PROXIMITY] Player returned to city '{}' — resuming from journal", city.cityId);
                     }
                     city.state = CityState.GENERATING;
-                    CityBuildScheduler.resumeCityGeneration(city, level, playerX, playerZ);
+                    // >>> FIX: аналогично PENDING — откатываемся при неудаче.
+                    if (!CityBuildScheduler.resumeCityGeneration(city, level, playerX, playerZ)) {
+                        LOGGER.warn("Warn: [PROXIMITY] resumeCityGeneration failed for '{}', reverting to PAUSED", city.cityId);
+                        city.state = CityState.PAUSED;
+                    }
                 }
                 break;
             case COMPLETED:
@@ -142,7 +151,7 @@ public class PlayerProximityTracker {
         }
     }
 
-    private static void startGeneration(CityInfo city, ServerLevel level, int playerX, int playerZ) {
+    private static boolean startGeneration(CityInfo city, ServerLevel level, int playerX, int playerZ) {
         CityGenerationContext context = CityGenerationContextRegistry.get(city.centerX, city.centerZ);
 
         if (context == null) {
@@ -151,10 +160,10 @@ public class PlayerProximityTracker {
 
         if (context == null) {
             LOGGER.error("Error: [PROXIMITY] No context available for city '{}'", city.cityId);
-            return;
+            return false;
         }
 
-        CityBuildScheduler.startCityGeneration(city, level, context, playerX, playerZ);
+        return CityBuildScheduler.startCityGeneration(city, level, context, playerX, playerZ);
     }
 
     public static void reset() {
