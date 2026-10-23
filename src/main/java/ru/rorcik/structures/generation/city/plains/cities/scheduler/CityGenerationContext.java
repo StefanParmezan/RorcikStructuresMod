@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class CityGenerationContext {
+    private final String worldId;
     private final int centerX;
     private final int centerZ;
     private final String typeId;
@@ -20,9 +21,10 @@ public class CityGenerationContext {
     private final long seed;
     private final int baseY;
 
-    public CityGenerationContext(int centerX, int centerZ, String typeId, int targetHeight,
+    public CityGenerationContext(String worldId, int centerX, int centerZ, String typeId, int targetHeight,
                                  Map<BlockPos, RoadNode> nodeMap, Set<BlockPos> straightPositions,
                                  List<BuildingSlot> slots, RoadNetwork roadNetwork, long seed, int baseY) {
+        this.worldId = worldId;
         this.centerX = centerX;
         this.centerZ = centerZ;
         this.typeId = typeId;
@@ -35,35 +37,10 @@ public class CityGenerationContext {
         this.baseY = baseY;
     }
 
-    public int[] getBoundingBox() {
-        int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
-        int minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
-
-        for (BlockPos pos : nodeMap.keySet()) {
-            minX = Math.min(minX, pos.getX());
-            maxX = Math.max(maxX, pos.getX());
-            minZ = Math.min(minZ, pos.getZ());
-            maxZ = Math.max(maxZ, pos.getZ());
-        }
-
-        for (BlockPos pos : straightPositions) {
-            minX = Math.min(minX, pos.getX());
-            maxX = Math.max(maxX, pos.getX());
-            minZ = Math.min(minZ, pos.getZ());
-            maxZ = Math.max(maxZ, pos.getZ());
-        }
-
-        for (BuildingSlot slot : slots) {
-            minX = Math.min(minX, slot.position().getX());
-            maxX = Math.max(maxX, slot.position().getX());
-            minZ = Math.min(minZ, slot.position().getZ());
-            maxZ = Math.max(maxZ, slot.position().getZ());
-        }
-
-        return new int[]{minX, maxX, minZ, maxZ};
+    public String cityId() {
+        return worldId + "_city@" + centerX + "," + centerZ;
     }
 
-    public int baseY() { return baseY; }
     public int centerX() { return centerX; }
     public int centerZ() { return centerZ; }
     public String typeId() { return typeId; }
@@ -73,5 +50,6 @@ public class CityGenerationContext {
     public List<BuildingSlot> slots() { return slots; }
     public RoadNetwork roadNetwork() { return roadNetwork; }
     public long seed() { return seed; }
-    public String cityId() { return "city@" + centerX + "," + centerZ; }
+    public int baseY() { return baseY; }
+    public String worldId() { return worldId; }
 }

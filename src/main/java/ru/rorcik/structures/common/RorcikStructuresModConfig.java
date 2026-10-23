@@ -50,8 +50,6 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.BooleanValue PLAINS_SPAWN_PARKS;
     public static final ForgeConfigSpec.BooleanValue PLAINS_PARK_ONLY_RECT;
     public static final ForgeConfigSpec.IntValue PLAINS_CHUNK_LOAD_RADIUS;
-
-    // >>> FIX: новое поле конфига
     public static final ForgeConfigSpec.IntValue PLAINS_MIN_TERMINAL_DISTANCE;
 
     public static final ForgeConfigSpec.IntValue DESERT_BUILDING_COUNT;
@@ -60,186 +58,14 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.IntValue DESERT_MIN_DIRECTIONS;
     public static final ForgeConfigSpec.IntValue DESERT_MAX_DIRECTIONS;
     public static final ForgeConfigSpec.IntValue DESERT_Y_OFFSET;
+
     public static final ForgeConfigSpec.IntValue WORKER_POOL_SIZE;
     public static final ForgeConfigSpec.IntValue BUFFER_DISTANCE;
     public static final ForgeConfigSpec.IntValue ABANDON_DISTANCE;
-    public static final ForgeConfigSpec.IntValue MAX_PENDING_TASKS;
+    public static final ForgeConfigSpec.IntValue MAX_PENDING_TASKS; 
     public static final ForgeConfigSpec.IntValue PROXIMITY_CHECK_INTERVAL_TICKS;
 
     public static final ForgeConfigSpec.BooleanValue ENABLE_ROAD_DECORATIONS;
-
-    static {
-        BUILDER.comment("General mod settings").push("general");
-        DEBUG_MODE = BUILDER
-                .comment("Enable debug mode (extra logging and checks)")
-                .define("debugMode", false);
-        ENABLE_LOGGING = BUILDER
-                .comment("Master switch for ALL mod logging. Set to false to silence the mod completely.")
-                .define("enableLogging", false);
-        LOG_CACHE_MISSES = BUILDER
-                .comment("Log warnings when a template is not found in cache")
-                .define("logCacheMisses", false);
-        LOG_GENERATION_DETAILS = BUILDER
-                .comment("Log detailed generation info (slots, phases, timings)")
-                .define("logGenerationDetails", false);
-        BUILDER.pop();
-
-        BUILDER.comment("Structure cache settings").push("cache");
-        USE_CACHING = BUILDER
-                .comment("Enable structure caching (HIGHLY recommended)")
-                .define("use_caching", true);
-        BUILDING_CACHE_SIZE = BUILDER
-                .comment(
-                        "Max compiled BUILDING templates in memory.",
-                        "-1 = auto-detect based on available RAM.",
-                        ">0 = manual override (e.g. 512, 1024)."
-                )
-                .defineInRange("buildingCacheSize", -1, -1, 8192);
-        ROOM_CACHE_SIZE = BUILDER
-                .comment(
-                        "Max compiled ROOM templates in memory.",
-                        "-1 = auto-detect based on available RAM.",
-                        ">0 = manual override (e.g. 4096, 8192)."
-                )
-                .defineInRange("roomCacheSize", -1, -1, 32768);
-        UNLOAD_AFTER_GENERATION = BUILDER
-                .comment("Unload compiled templates from RAM after city generation completes.")
-                .define("unloadAfterGeneration", true);
-        BUILDING_MEMORY_BUDGET_PERCENT = BUILDER
-                .comment("Percent of available memory budget for building cache (auto mode)")
-                .defineInRange("buildingMemoryBudgetPercent", 70, 10, 90);
-        ROOM_MEMORY_BUDGET_PERCENT = BUILDER
-                .comment("Percent of available memory budget for room cache (auto mode)")
-                .defineInRange("roomMemoryBudgetPercent", 30, 10, 90);
-        RESERVED_RAM_MB = BUILDER
-                .comment("RAM to keep free (in MB) when auto-detecting cache sizes")
-                .defineInRange("reservedRamMb", 2048L, 512L, 16384L);
-        BUILDER.pop();
-
-        BUILDER.comment("Performance / scheduling settings").push("performance");
-        INITIAL_STRUCTURES_PER_TICK = BUILDER
-                .comment("Starting number of structures placed per tick")
-                .defineInRange("initialStructuresPerTick", 16, 1, 256);
-        MIN_STRUCTURES_PER_TICK = BUILDER
-                .comment("Minimum structures per tick (adaptive floor)")
-                .defineInRange("minStructuresPerTick", 2, 1, 64);
-        MAX_STRUCTURES_PER_TICK = BUILDER
-                .comment("Maximum structures per tick (adaptive ceiling)")
-                .defineInRange("maxStructuresPerTick", 64, 8, 512);
-        TARGET_TICK_TIME_MS = BUILDER
-                .comment("Target tick time in ms for adaptive scheduler")
-                .defineInRange("targetTickTimeMs", 30L, 10L, 100L);
-        CHUNKS_PER_TICK = BUILDER
-                .comment("How many chunks to force-load per tick during generation")
-                .defineInRange("chunksPerTick", 48, 4, 256);
-        PRELOAD_PER_TICK_DURING_CHUNKS = BUILDER
-                .comment("Templates to preload per tick while chunks are loading")
-                .defineInRange("preloadPerTickDuringChunks", 6, 1, 64);
-        PRELOAD_PER_TICK_BEFORE_BUILD = BUILDER
-                .comment("Templates to preload per tick before building phase")
-                .defineInRange("preloadPerTickBeforeBuild", 15, 1, 128);
-        BUILDER.pop();
-
-        BUILDER.comment("Plains city generation settings").push("plains_city");
-        PLAINS_ROAD_STEP = BUILDER
-                .comment("Distance between road nodes (in blocks). Affects city density.")
-                .defineInRange("roadStep", 64, 16, 256);
-        PLAINS_BUILDING_DISTANCE = BUILDER
-                .comment("Distance from road to building (in blocks)")
-                .defineInRange("buildingDistance", 64, 16, 256);
-        PLAINS_STRAIGHT_BETWEEN_NODES = BUILDER
-                .comment("Number of straight road segments between nodes")
-                .defineInRange("straightBetweenNodes", 2, 0, 10);
-        PLAINS_MAX_GRAPH_DEPTH = BUILDER
-                .comment("Maximum depth of road graph (affects city size)")
-                .defineInRange("maxGraphDepth", 5, 1, 20);
-        PLAINS_MAX_NODES = BUILDER
-                .comment("Maximum number of road nodes (caps city size)")
-                .defineInRange("maxNodes", 70, 10, 500);
-        PLAINS_BUILDING_MIN_DEPTH = BUILDER
-                .comment("Minimum building row depth from road")
-                .defineInRange("buildingMinDepth", 2, 1, 10);
-        PLAINS_BUILDING_MAX_DEPTH = BUILDER
-                .comment("Maximum building row depth from road")
-                .defineInRange("buildingMaxDepth", 2, 1, 10);
-        PLAINS_HOUSES_CHANCE = BUILDER
-                .comment("Chance (%) to spawn a house at a slot")
-                .defineInRange("housesChance", 90, 0, 100);
-        PLAINS_OTHER_CHANCE = BUILDER
-                .comment("Chance (%) to spawn 'other' category building")
-                .defineInRange("otherChance", 5, 0, 100);
-        PLAINS_LOOTABLE_CHANCE = BUILDER
-                .comment("Chance (%) to spawn lootable building")
-                .defineInRange("lootableChance", 3, 0, 100);
-        PLAINS_SPAWN_PARKS = BUILDER
-                .comment("Allow parks to spawn in the city")
-                .define("spawnParks", true);
-        PLAINS_PARK_ONLY_RECT = BUILDER
-                .comment("Only spawn rectangular (non-square) parks")
-                .define("parkOnlyRect", false);
-        PLAINS_CHUNK_LOAD_RADIUS = BUILDER
-                .comment("Radius (in chunks) around city to force-load")
-                .defineInRange("chunkLoadRadius", 4, 1, 16);
-
-        // >>> FIX: минимальное расстояние от центра, ближе которого дорога
-        // не может терминироваться (st-дорога не появится в середине города).
-        PLAINS_MIN_TERMINAL_DISTANCE = BUILDER
-                .comment(
-                        "Minimum distance (in blocks) from city center before a road can terminate (st road).",
-                        "Prevents stop-roads appearing in the middle of the city.",
-                        "Default 400 ~ 6 * roadStep."
-                )
-                .defineInRange("minTerminalDistance", 400, 64, 2048);
-        BUILDER.pop();
-
-        BUILDER.comment("Desert city generation settings").push("desert_city");
-        DESERT_BUILDING_COUNT = BUILDER
-                .comment("Number of buildings to generate in a desert city")
-                .defineInRange("buildingCount", 150, 10, 1000);
-        DESERT_STEP_MIN = BUILDER
-                .comment("Minimum step size when scattering buildings")
-                .defineInRange("stepMin", 32, 8, 128);
-        DESERT_STEP_MAX = BUILDER
-                .comment("Maximum step size when scattering buildings")
-                .defineInRange("stepMax", 32, 8, 256);
-        DESERT_MIN_DIRECTIONS = BUILDER
-                .comment("Minimum number of random scatter directions per building")
-                .defineInRange("minDirections", 1, 1, 8);
-        DESERT_MAX_DIRECTIONS = BUILDER
-                .comment("Maximum number of random scatter directions per building")
-                .defineInRange("maxDirections", 4, 1, 16);
-        DESERT_Y_OFFSET = BUILDER
-                .comment("Y offset applied to desert buildings (negative = lower)")
-                .defineInRange("yOffset", -1, -32, 32);
-        BUILDER.pop();
-
-        BUILDER.comment("Road settings").push("roads");
-        ENABLE_ROAD_DECORATIONS = BUILDER
-                .comment("Enable road decorations (lampposts, etc.)")
-                .define("enableRoadDecorations", true);
-        WORKER_POOL_SIZE = BUILDER
-                .comment("Number of worker threads for parallel city generation. -1 = auto-detect")
-                .defineInRange("workerPoolSize", -1, -1, 32);
-
-        BUFFER_DISTANCE = BUILDER
-                .comment("Distance in blocks at which city generation starts")
-                .defineInRange("bufferDistance", 96, 32, 512);
-
-        ABANDON_DISTANCE = BUILDER
-                .comment("Distance in blocks at which city generation pauses")
-                .defineInRange("abandonDistance", 192, 64, 1024);
-
-        MAX_PENDING_TASKS = BUILDER.comment("Maximum number of anchor chunk tasks in queue")
-                .defineInRange("maxPendingTasks", 512, 16, 2048);
-
-        PROXIMITY_CHECK_INTERVAL_TICKS = BUILDER
-                .comment("How often (in ticks) to check player position")
-                .defineInRange("proximityCheckIntervalTicks", 10, 1, 100);
-
-        BUILDER.pop();
-
-        SPEC = BUILDER.build();
-    }
 
     public static final ForgeConfigSpec SPEC;
 
@@ -277,8 +103,6 @@ public class RorcikStructuresModConfig {
     public static boolean plainsSpawnParks;
     public static boolean plainsParkOnlyRect;
     public static int plainsChunkLoadRadius;
-
-    // >>> FIX
     public static int plainsMinTerminalDistance;
 
     public static int desertBuildingCount;
@@ -295,6 +119,74 @@ public class RorcikStructuresModConfig {
     public static int proximityCheckIntervalTicks;
 
     public static boolean enableRoadDecorations;
+
+    static {
+        BUILDER.comment("General mod settings").push("general");
+        DEBUG_MODE = BUILDER.comment("Enable debug mode (extra logging and checks)").define("debugMode", false);
+        ENABLE_LOGGING = BUILDER.comment("Master switch for ALL mod logging. Set to false to silence the mod completely.").define("enableLogging", false);
+        LOG_CACHE_MISSES = BUILDER.comment("Log warnings when a template is not found in cache").define("logCacheMisses", false);
+        LOG_GENERATION_DETAILS = BUILDER.comment("Log detailed generation info (slots, phases, timings)").define("logGenerationDetails", false);
+        BUILDER.pop();
+
+        BUILDER.comment("Structure cache settings").push("cache");
+        USE_CACHING = BUILDER.comment("Enable structure caching (HIGHLY recommended)").define("use_caching", true);
+        BUILDING_CACHE_SIZE = BUILDER.comment("Max compiled BUILDING templates in memory. -1 = auto-detect, >0 = manual override").defineInRange("buildingCacheSize", -1, -1, 8192);
+        ROOM_CACHE_SIZE = BUILDER.comment("Max compiled ROOM templates in memory. -1 = auto-detect, >0 = manual override").defineInRange("roomCacheSize", -1, -1, 32768);
+        UNLOAD_AFTER_GENERATION = BUILDER.comment("Unload compiled templates from RAM after city generation completes.").define("unloadAfterGeneration", true);
+        BUILDING_MEMORY_BUDGET_PERCENT = BUILDER.comment("Percent of available memory budget for building cache (auto mode)").defineInRange("buildingMemoryBudgetPercent", 70, 10, 90);
+        ROOM_MEMORY_BUDGET_PERCENT = BUILDER.comment("Percent of available memory budget for room cache (auto mode)").defineInRange("roomMemoryBudgetPercent", 30, 10, 90);
+        RESERVED_RAM_MB = BUILDER.comment("RAM to keep free (in MB) when auto-detecting cache sizes").defineInRange("reservedRamMb", 2048L, 512L, 16384L);
+        BUILDER.pop();
+
+        BUILDER.comment("Performance / scheduling settings").push("performance");
+        INITIAL_STRUCTURES_PER_TICK = BUILDER.comment("Starting number of structures placed per tick").defineInRange("initialStructuresPerTick", 16, 1, 256);
+        MIN_STRUCTURES_PER_TICK = BUILDER.comment("Minimum structures per tick (adaptive floor)").defineInRange("minStructuresPerTick", 2, 1, 64);
+        MAX_STRUCTURES_PER_TICK = BUILDER.comment("Maximum structures per tick (adaptive ceiling)").defineInRange("maxStructuresPerTick", 64, 8, 512);
+        TARGET_TICK_TIME_MS = BUILDER.comment("Target tick time in ms for adaptive scheduler").defineInRange("targetTickTimeMs", 30L, 10L, 100L);
+        CHUNKS_PER_TICK = BUILDER.comment("How many chunks to force-load per tick during generation").defineInRange("chunksPerTick", 48, 4, 256);
+        PRELOAD_PER_TICK_DURING_CHUNKS = BUILDER.comment("Templates to preload per tick while chunks are loading").defineInRange("preloadPerTickDuringChunks", 6, 1, 64);
+        PRELOAD_PER_TICK_BEFORE_BUILD = BUILDER.comment("Templates to preload per tick before building phase").defineInRange("preloadPerTickBeforeBuild", 15, 1, 128);
+        BUILDER.pop();
+
+        BUILDER.comment("Plains city generation settings").push("plains_city");
+        PLAINS_ROAD_STEP = BUILDER.comment("Distance between road nodes (in blocks).").defineInRange("roadStep", 64, 16, 256);
+        PLAINS_BUILDING_DISTANCE = BUILDER.comment("Distance from road to building (in blocks)").defineInRange("buildingDistance", 64, 16, 256);
+        PLAINS_STRAIGHT_BETWEEN_NODES = BUILDER.comment("Number of straight road segments between nodes").defineInRange("straightBetweenNodes", 2, 0, 10);
+        PLAINS_MAX_GRAPH_DEPTH = BUILDER.comment("Maximum depth of road graph (affects city size)").defineInRange("maxGraphDepth", 5, 1, 20);
+        PLAINS_MAX_NODES = BUILDER.comment("Maximum number of road nodes (caps city size)").defineInRange("maxNodes", 70, 10, 500);
+        PLAINS_BUILDING_MIN_DEPTH = BUILDER.comment("Minimum building row depth from road").defineInRange("buildingMinDepth", 2, 1, 10);
+        PLAINS_BUILDING_MAX_DEPTH = BUILDER.comment("Maximum building row depth from road").defineInRange("buildingMaxDepth", 2, 1, 10);
+        PLAINS_HOUSES_CHANCE = BUILDER.comment("Chance (%) to spawn a house at a slot").defineInRange("housesChance", 90, 0, 100);
+        PLAINS_OTHER_CHANCE = BUILDER.comment("Chance (%) to spawn 'other' category building").defineInRange("otherChance", 5, 0, 100);
+        PLAINS_LOOTABLE_CHANCE = BUILDER.comment("Chance (%) to spawn lootable building").defineInRange("lootableChance", 3, 0, 100);
+        PLAINS_SPAWN_PARKS = BUILDER.comment("Allow parks to spawn in the city").define("spawnParks", true);
+        PLAINS_PARK_ONLY_RECT = BUILDER.comment("Only spawn rectangular (non-square) parks").define("parkOnlyRect", false);
+        PLAINS_CHUNK_LOAD_RADIUS = BUILDER.comment("Radius (in chunks) around city to force-load").defineInRange("chunkLoadRadius", 4, 1, 16);
+        PLAINS_MIN_TERMINAL_DISTANCE = BUILDER.comment("Minimum distance (in blocks) from city center before a road can terminate (st road).").defineInRange("minTerminalDistance", 400, 64, 2048);
+        BUILDER.pop();
+
+        BUILDER.comment("Desert city generation settings").push("desert_city");
+        DESERT_BUILDING_COUNT = BUILDER.comment("Number of buildings to generate in a desert city").defineInRange("buildingCount", 150, 10, 1000);
+        DESERT_STEP_MIN = BUILDER.comment("Minimum step size when scattering buildings").defineInRange("stepMin", 32, 8, 128);
+        DESERT_STEP_MAX = BUILDER.comment("Maximum step size when scattering buildings").defineInRange("stepMax", 32, 8, 256);
+        DESERT_MIN_DIRECTIONS = BUILDER.comment("Minimum number of random scatter directions per building").defineInRange("minDirections", 1, 1, 8);
+        DESERT_MAX_DIRECTIONS = BUILDER.comment("Maximum number of random scatter directions per building").defineInRange("maxDirections", 4, 1, 16);
+        DESERT_Y_OFFSET = BUILDER.comment("Y offset applied to desert buildings (negative = lower)").defineInRange("yOffset", -1, -32, 32);
+        BUILDER.pop();
+
+        BUILDER.comment("Road settings").push("roads");
+        ENABLE_ROAD_DECORATIONS = BUILDER.comment("Enable road decorations (lampposts, etc.)").define("enableRoadDecorations", true);
+        WORKER_POOL_SIZE = BUILDER.comment("Number of worker threads for parallel city generation. -1 = auto-detect").defineInRange("workerPoolSize", -1, -1, 32);
+        BUFFER_DISTANCE = BUILDER.comment("Distance in blocks at which city generation starts").defineInRange("bufferDistance", 96, 32, 512);
+        ABANDON_DISTANCE = BUILDER.comment("Distance in blocks at which city generation pauses").defineInRange("abandonDistance", 192, 64, 1024);
+
+        MAX_PENDING_TASKS = BUILDER.comment("Maximum number of anchor chunk tasks in queue").defineInRange("maxPendingTasks", 512, 16, 4096);
+
+        PROXIMITY_CHECK_INTERVAL_TICKS = BUILDER.comment("How often (in ticks) to check player position").defineInRange("proximityCheckIntervalTicks", 10, 1, 100);
+        BUILDER.pop();
+
+        SPEC = BUILDER.build();
+    }
 
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event) {
@@ -343,8 +235,6 @@ public class RorcikStructuresModConfig {
         plainsSpawnParks = PLAINS_SPAWN_PARKS.get();
         plainsParkOnlyRect = PLAINS_PARK_ONLY_RECT.get();
         plainsChunkLoadRadius = PLAINS_CHUNK_LOAD_RADIUS.get();
-
-        // >>> FIX
         plainsMinTerminalDistance = PLAINS_MIN_TERMINAL_DISTANCE.get();
 
         desertBuildingCount = DESERT_BUILDING_COUNT.get();

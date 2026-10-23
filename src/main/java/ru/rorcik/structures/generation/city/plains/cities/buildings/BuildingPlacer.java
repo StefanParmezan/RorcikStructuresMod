@@ -8,7 +8,10 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+import org.slf4j.Logger;
+import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.ModPaths;
+import ru.rorcik.structures.common.RorcikStructuresModConfig;
 import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.city.plains.config_loaders.HouseConfigLoader;
 import ru.rorcik.structures.data.city.plains.config_loaders.ParkConfigLoader;
@@ -25,6 +28,7 @@ import java.util.Optional;
 import java.util.Set;
 
 public class BuildingPlacer {
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final HouseGenerator HOUSE_GENERATOR = new HouseGenerator();
     private static final int BUILDING_Y_OFFSET = -1;
     private static final String PLATFORM_CATEGORY = "platforms";
@@ -34,11 +38,11 @@ public class BuildingPlacer {
             .setKnownShape(true);
 
     public static void placeBuilding(ServerLevel level, BuildingSlot slot) {
-        if (slot.category().equals("houses")) {
+        if ("houses".equals(slot.category())) {
             HOUSE_GENERATOR.generate(level, slot.position(), slot.buildingName(), slot.rotation());
-        } else if (slot.category().equals(PLATFORM_CATEGORY)) {
+        } else if (PLATFORM_CATEGORY.equals(slot.category())) {
             placePlatform(level, slot);
-        } else if (slot.category().equals(PARKS_CATEGORY)) {
+        } else if (PARKS_CATEGORY.equals(slot.category())) {
             placePark(level, slot);
         } else {
             placeSimpleBuilding(level, slot);
@@ -76,7 +80,6 @@ public class BuildingPlacer {
             BlockPos houseOrigin, Rotation houseRotation, RandomSource random,
             int houseSizeX, int houseSizeZ
     ) {
-
         Rotation roomRotation = Rotation.values()[
                 ((room.rotation() + houseRotation.ordinal() * 90) % 360) / 90
                 ];
@@ -136,8 +139,10 @@ public class BuildingPlacer {
 
     private static void placePark(ServerLevel level, BuildingSlot slot) {
         ParkConfig park = ParkConfigLoader.getPark(slot.buildingName());
-        if (park == null) return;
-
+        if (park == null) {
+            LOGGER.error("Error: [PLACE] Park config not found for: {}", slot.buildingName());
+            return;
+        }
         BlockPos buildingPos = slot.position();
         Direction side = slot.roadSide();
         BlockPos roadPos = buildingPos.relative(side.getOpposite(), GeneratorConfig.BUILDING_DISTANCE);
@@ -147,10 +152,17 @@ public class BuildingPlacer {
     private static void placeSimpleBuilding(ServerLevel level, BuildingSlot slot) {
         String nbtPath = ModPaths.buildingNbtPath(slot.category(), slot.buildingName());
         ResourceLocation location = ResourceLocation.tryParse(nbtPath);
-        if (location == null) return;
+        if (location == null) {
+            LOGGER.error("Error: [PLACE] Invalid resource location for building: {}", nbtPath);
+            return;
+        }
 
         Optional<StructureTemplate> templateOpt = StructureCache.get(location);
-        if (templateOpt.isEmpty()) return;
+        if (templateOpt.isEmpty()) {
+            
+            LOGGER.error("Error: [PLACE] CRITICAL: Structure template NOT FOUND in cache for: '{}'. This is why the area is empty!", nbtPath);
+            return;
+        }
 
         StructureTemplate template = templateOpt.get();
         BlockPos size = new BlockPos(template.getSize());
@@ -164,10 +176,17 @@ public class BuildingPlacer {
     private static void placePlatform(ServerLevel level, BuildingSlot slot) {
         String nbtPath = ModPaths.platformNbtPath(slot.buildingName());
         ResourceLocation location = ResourceLocation.tryParse(nbtPath);
-        if (location == null) return;
+        if (location == null) {
+            LOGGER.error("Error: [PLACE] Invalid resource location for platform: {}", nbtPath);
+            return;
+        }
 
         Optional<StructureTemplate> templateOpt = StructureCache.get(location);
-        if (templateOpt.isEmpty()) return;
+        if (templateOpt.isEmpty()) {
+            
+            LOGGER.error("Error: [PLACE] CRITICAL: Platform template NOT FOUND in cache for: '{}'. This is why the area is empty!", nbtPath);
+            return;
+        }
 
         StructureTemplate template = templateOpt.get();
         BlockPos size = new BlockPos(template.getSize());
@@ -177,8 +196,9 @@ public class BuildingPlacer {
         );
         StructureUtils.placeStructure(level, compensated, nbtPath, slot.rotation(), false, false);
     }
+
     public static void placeBuildingShell(ServerLevel level, BuildingSlot slot) {
-        if (slot.category().equals("houses")) {
+        if ("houses".equals(slot.category())) {
             placeHouseShell(level, slot);
         } else {
             placeBuilding(level, slot);
@@ -188,7 +208,10 @@ public class BuildingPlacer {
     private static void placeHouseShell(ServerLevel level, BuildingSlot slot) {
         String houseType = slot.buildingName().toLowerCase();
         HouseConfig config = HouseConfigLoader.getConfig(houseType);
-        if (config == null) return;
+        if (config == null) {
+            LOGGER.error("Error: [PLACE] House config not found for: {}", houseType);
+            return;
+        }
 
         long uniqueSeed = level.getSeed() ^ slot.position().hashCode();
         RandomSource random = RandomSource.create(uniqueSeed);
@@ -209,16 +232,12 @@ public class BuildingPlacer {
         HouseConfig config = HouseConfigLoader.getConfig(houseType);
         if (config == null) return;
 
-        long uniqueSeed = level.getSeed() ^ slot.position().hashCode();
-        RandomSource roomRandom = RandomSource.create(uniqueSeed);
-
         BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(slot.position(), config);
         int houseSizeX = config.size()[0];
         int houseSizeZ = config.size()[2];
 
         for (RoomSlot room : config.rooms()) {
-            placeAllFloorsForRoom(level, config, room, houseOrigin, slot.rotation(), roomRandom, houseSizeX, houseSizeZ);
+            placeAllFloorsForRoom(level, config, room, houseOrigin, slot.rotation(), random, houseSizeX, houseSizeZ);
         }
     }
-
 }

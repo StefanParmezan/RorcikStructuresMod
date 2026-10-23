@@ -55,15 +55,9 @@ public class CityJournalWriter {
         WRITE_QUEUE.offer(journal);
     }
 
-    /**
-     * Останавливает writer, но сначала ДРЕНит очередь — сохраняет
-     * все накопленные изменения. Иначе последние 5–15 секунд
-     * прогресса генерации терялись при выключении сервера.
-     */
     public static void shutdown() {
         running = false;
 
-        // >>> FIX: дреним очередь, чтобы не потерять последние save()
         int drained = 0;
         CityJournal remaining;
         while ((remaining = WRITE_QUEUE.poll()) != null) {

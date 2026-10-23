@@ -14,15 +14,20 @@ public class PriorityTaskQueue {
     private final AtomicInteger uniqueSequence = new AtomicInteger(0);
     private final int maxCapacity;
 
-    public PriorityTaskQueue(int maxCapacity) { this.maxCapacity = maxCapacity; }
+    public PriorityTaskQueue(int maxCapacity) {
+        this.maxCapacity = maxCapacity;
+    }
 
     public boolean offer(AnchorChunkTask task) {
+        
         if (tasks.size() >= maxCapacity) {
-            LOGGER.warn("Warn: [TASK-QUEUE] Queue full ({}/{}), rejecting task {}", tasks.size(), maxCapacity, task);
-            return false;
+            LOGGER.warn("Warn: [TASK-QUEUE] Queue exceeded capacity ({}/{}). Expanding dynamically to prevent task loss for: {}",
+                    tasks.size(), maxCapacity, task);
         }
+
         PrioritizedTask prioritized = new PrioritizedTask(task, task.priority(), uniqueSequence.getAndIncrement());
         boolean added = tasks.add(prioritized);
+
         if (added && RorcikStructuresModConfig.enableLogging) {
             LOGGER.debug("Info: [TASK-QUEUE] Added task {} (priority={}, queue size={})", task, task.priority(), tasks.size());
         }

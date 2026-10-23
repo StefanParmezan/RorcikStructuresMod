@@ -19,8 +19,6 @@ public final class GeneratorConfig {
     public static boolean PARK_ONLY_RECT = false;
     public static int CHUNK_LOAD_RADIUS = 4;
 
-    // >>> FIX: минимальное расстояние от центра, ближе которого
-    // дорога не может терминироваться (st-дорога не появится в середине).
     public static int MIN_TERMINAL_DISTANCE = 400;
 
     public static int DESERT_BUILDING_COUNT = 150;
@@ -63,7 +61,6 @@ public final class GeneratorConfig {
         PARK_ONLY_RECT = RorcikStructuresModConfig.plainsParkOnlyRect;
         CHUNK_LOAD_RADIUS = RorcikStructuresModConfig.plainsChunkLoadRadius;
 
-        // >>> FIX
         MIN_TERMINAL_DISTANCE = RorcikStructuresModConfig.plainsMinTerminalDistance;
 
         DESERT_BUILDING_COUNT = RorcikStructuresModConfig.desertBuildingCount;

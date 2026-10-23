@@ -153,9 +153,7 @@ public class CityJournal {
             if (entries != null) {
                 for (String entry : entries) {
                     try {
-                        // >>> FIX: используем addEntryDirect, т.к. в журнале
-                        // направление уже сохранено в "мировых" терминах.
-                        // addEntry() инвертировал бы его и ломал форму дорог.
+                        
                         node.addEntryDirect(Direction.valueOf(entry));
                     } catch (IllegalArgumentException e) {
                         LOGGER.warn("Warn: [JOURNAL] Invalid direction in entries: {}", entry);
@@ -415,16 +413,16 @@ public class CityJournal {
     }
 
     public void initializeCity(long seed, int baseY, int targetHeight) {
-        if (this.seed != 0) {
-            if (RorcikStructuresModConfig.enableLogging) {
-                LOGGER.info("Info: [JOURNAL] City already initialized at [{}, {}], keeping seed={}", centerX, centerZ, this.seed);
-            }
-            return;
-        }
         this.seed = seed;
         this.baseY = baseY;
         this.targetHeight = targetHeight;
         this.cityStatus = CityStatus.GENERATING.name();
+
+        this.slots.clear();
+        this.roadNodes.clear();
+        this.straightRoads.clear();
+        this.roadNetworkData = null;
+
         if (RorcikStructuresModConfig.enableLogging) {
             LOGGER.info("Info: [JOURNAL] Initialized city [{}, {}] with seed={}, baseY={}, targetHeight={}",
                     centerX, centerZ, seed, baseY, targetHeight);
@@ -618,11 +616,6 @@ public class CityJournal {
         }
     }
 
-    /**
-     * Атомарная запись журнала: сначала .tmp, потом atomic move.
-     * На POSIX rename(2) атомарен — если процесс убьют посреди записи,
-     * на диске останется либо старая целая версия, либо новая целая.
-     */
     public void save() {
         try {
             Path journalsDir = journalPath.getParent();
@@ -649,8 +642,6 @@ public class CityJournal {
 
             String json = GSON.toJson(data);
 
-            // >>> FIX: атомарная запись через .tmp + ATOMIC_MOVE,
-            // чтобы краш посреди записи не оставил битый файл.
             Path tmpPath = journalPath.resolveSibling(journalPath.getFileName() + ".tmp");
             Files.writeString(tmpPath, json,
                     StandardOpenOption.CREATE,

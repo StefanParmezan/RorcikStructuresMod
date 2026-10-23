@@ -9,6 +9,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.fml.ModList;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.core.event.ZoneEvents;
@@ -42,22 +43,43 @@ public class CityZonePlanner {
             }
 
             BlockPos checkPos = new BlockPos(centerX, level.getSeaLevel(), centerZ);
-            Holder<Biome> biomeHolder = level.getBiome(checkPos);
-            ResourceLocation biomeId = biomeHolder.unwrapKey().map(k -> k.location()).orElse(null);
+            net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> biomeHolder = level.getBiome(checkPos);
+            net.minecraft.resources.ResourceLocation biomeId = biomeHolder.unwrapKey().map(k -> k.location()).orElse(null);
+
             if (biomeId == null) {
                 LOGGER.warn("Warn: [CITY-PLANNER] Failed to get biome ID at [{}, {}]", centerX, centerZ);
                 return false;
             }
-            TemperatureZone currentZone = getBiomeTemperatureZone(biomeId, biomeHolder.value());
+
+            if (net.minecraftforge.fml.ModList.get().isLoaded("rwg")) {
+                try {
+                    Class<?> rwgConfigClass = Class.forName("ru.rorcik.rwg.RwgConfig");
+                    java.lang.reflect.Method isAllowedMethod = rwgConfigClass.getMethod("isAllowedSpawnBiome", net.minecraft.resources.ResourceLocation.class);
+                    Boolean isAllowed = (Boolean) isAllowedMethod.invoke(null, biomeId);
+                    if (Boolean.FALSE.equals(isAllowed)) {
+                        if (RorcikStructuresModConfig.enableLogging) {
+                            LOGGER.info("Info: [CITY-PLANNER] Biome {} is blacklisted by RWG, skipping reservation at [{}, {}]", biomeId, centerX, centerZ);
+                        }
+                        return false;
+                    }
+                } catch (Exception e) {
+                    if (RorcikStructuresModConfig.enableLogging) {
+                        LOGGER.warn("Warn: [CITY-PLANNER] Failed to check RWG biome blacklist via reflection, proceeding anyway.", e);
+                    }
+                }
+            }
+
+            ru.rorcik.core.zone.TemperatureZone currentZone = getBiomeTemperatureZone(biomeId, biomeHolder.value());
             if (RorcikStructuresModConfig.enableLogging) {
                 LOGGER.info("Info: [CITY-PLANNER] Biome: {} | Zone: {}", biomeId, currentZone);
             }
+
             if (currentZone == null || !type.allowedZones.contains(currentZone)) {
                 LOGGER.warn("Warn: [CITY-PLANNER] Biome not suitable for type {}", type.id);
                 return false;
             }
 
-            ZoneRegistrySavedData registry = ZoneRegistrySavedData.get(level);
+            ru.rorcik.core.zone.ZoneRegistrySavedData registry = ru.rorcik.core.zone.ZoneRegistrySavedData.get(level);
             boolean reserved = registry.tryReserveZone(centerX, centerZ, type.toZoneRules());
             if (!reserved) {
                 LOGGER.warn("Warn: [CITY-PLANNER] Zone already occupied");
@@ -69,7 +91,7 @@ public class CityZonePlanner {
             }
 
             DryRunResult dryRun = performDryRun(level, centerX, centerZ, type.targetHeight);
-            Set<Long> affectedChunks = calculateExactChunks(dryRun);
+            java.util.Set<Long> affectedChunks = calculateExactChunks(dryRun);
 
             CityJournal journal = CityJournal.load(centerX, centerZ, level);
             journal.initializeCity(dryRun.seed, dryRun.baseY, type.targetHeight);
@@ -102,20 +124,16 @@ public class CityZonePlanner {
             }
 
             journal.setRoadNetworkData(dryRun.roadNetwork);
-
-            // >>> FIX: персистим журнал на диск ДО регистрации контекста.
-            // Без этого CityBuildScheduler.startCityGeneration позже не найдёт файл
-            // и получит seed=0 (баг, из-за которого город не спавнился).
             journal.save();
 
             if (RorcikStructuresModConfig.enableLogging) {
                 LOGGER.info("Info: [CITY-PLANNER] Recorded to journal: {} road nodes, {} straight roads, {} building slots, seed={}",
                         roadNodeCount, straightRoadCount, buildingSlotCount, dryRun.seed);
-                LOGGER.info("Info: [CITY-PLANNER] Journal persisted to disk");
             }
 
+            String worldId = CityJournal.getWorldId(level);
             CityGenerationContext context = new CityGenerationContext(
-                    centerX, centerZ, type.id, type.targetHeight,
+                    worldId, centerX, centerZ, type.id, type.targetHeight,
                     dryRun.nodeMap, dryRun.straightPositions, dryRun.slots,
                     dryRun.roadNetwork, dryRun.seed, dryRun.baseY
             );
@@ -124,11 +142,11 @@ public class CityZonePlanner {
             CityGenerationSavedData genData = CityGenerationSavedData.get(level);
             genData.registerCity(centerX, centerZ, type.targetHeight);
 
-            MinecraftForge.EVENT_BUS.post(new ZoneEvents.ZoneReservedEvent(
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(new ru.rorcik.core.event.ZoneEvents.ZoneReservedEvent(
                     centerX, centerZ, type.toZoneRules(), type.targetHeight, affectedChunks
             ));
 
-            PlayerProximityTracker.registerCity(centerX, centerZ, affectedChunks);
+            PlayerProximityTracker.registerCity(worldId, centerX, centerZ, affectedChunks);
 
             if (RorcikStructuresModConfig.enableLogging) {
                 LOGGER.info("Info: [CITY-PLANNER] City fully prepared. Waiting for player...");
@@ -176,8 +194,9 @@ public class CityZonePlanner {
                 slots.add(slotData.toBuildingSlot());
             }
 
+            String worldId = CityJournal.getWorldId(level);
             CityGenerationContext context = new CityGenerationContext(
-                    centerX, centerZ, "plains", state.targetHeight(),
+                    worldId, centerX, centerZ, "plains", state.targetHeight(),
                     nodeMap, straightPositions, slots,
                     roadNetwork, journal.getSeed(), journal.getBaseY()
             );
@@ -190,15 +209,14 @@ public class CityZonePlanner {
         }
         DryRunResult dryRun = performDryRun(level, centerX, centerZ, state.targetHeight());
 
+        String worldId = CityJournal.getWorldId(level);
         CityGenerationContext context = new CityGenerationContext(
-                centerX, centerZ, "plains", state.targetHeight(),
+                worldId, centerX, centerZ, "plains", state.targetHeight(),
                 dryRun.nodeMap, dryRun.straightPositions, dryRun.slots,
                 dryRun.roadNetwork, dryRun.seed, dryRun.baseY
         );
         CityGenerationContextRegistry.register(context);
 
-        // >>> FIX: сохраняем восстановленный журнал, иначе при следующем рестарте
-        // сервера journal снова окажется с seed=0 и dry run будет выполняться заново.
         CityJournal rebuiltJournal = CityJournal.load(centerX, centerZ, level);
         if (rebuiltJournal.getSeed() == 0) {
             rebuiltJournal.rebuildFromContext(context);
@@ -216,15 +234,15 @@ public class CityZonePlanner {
         BlockPos origin = new BlockPos(centerX, baseY, centerZ);
 
         long deterministicSeed = level.getSeed() ^ (((long) centerX << 32) | (centerZ & 0xFFFFFFFFL));
-        RandomSource random = RandomSource.create(deterministicSeed);
+        net.minecraft.util.RandomSource random = net.minecraft.util.RandomSource.create(deterministicSeed);
 
         Map<BlockPos, RoadNode> nodeMap = new HashMap<>();
         Set<BlockPos> straightPositions = new HashSet<>();
-        RoadGraphBuilder.buildGraph(random, origin, Direction.SOUTH, 0, nodeMap, straightPositions);
+        ru.rorcik.structures.generation.city.plains.cities.roads.RoadGraphBuilder.buildGraph(random, origin, net.minecraft.core.Direction.SOUTH, 0, nodeMap, straightPositions);
 
         RoadNetwork roadNetwork = new RoadNetwork();
-        ParkWorldTracker tracker = ParkWorldTracker.get(level);
-        List<BuildingSlot> slots = BuildingSlotAllocator.allocateSlots(
+        ru.rorcik.structures.generation.city.plains.cities.buildings.ParkWorldTracker tracker = ru.rorcik.structures.generation.city.plains.cities.buildings.ParkWorldTracker.get(level);
+        List<BuildingSlot> slots = ru.rorcik.structures.generation.city.plains.cities.buildings.BuildingSlotAllocator.allocateSlots(
                 level, nodeMap, straightPositions, new HashSet<>(), random, tracker
         );
 
@@ -245,8 +263,8 @@ public class CityZonePlanner {
         for (Map.Entry<BlockPos, RoadNode> entry : dryRun.nodeMap.entrySet()) {
             BlockPos pos = entry.getKey();
             RoadNode node = entry.getValue();
-            List<Direction> connections = node.getAllConnections();
-            RoadConfigLoader.RoadMapEntry roadEntry = RoadConfigLoader.findRoadForConnections(connections);
+            List<net.minecraft.core.Direction> connections = node.getAllConnections();
+            ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader.RoadMapEntry roadEntry = ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader.findRoadForConnections(connections);
             if (roadEntry != null && "st".equals(roadEntry.type())) {
                 continue;
             }
@@ -274,14 +292,14 @@ public class CityZonePlanner {
         }
     }
 
-    private static TemperatureZone getBiomeTemperatureZone(ResourceLocation biomeId, Biome biome) {
-        Optional<TemperatureZone> coreZone = BiomeZoneRegistry.getZone(biomeId);
+    private static ru.rorcik.core.zone.TemperatureZone getBiomeTemperatureZone(net.minecraft.resources.ResourceLocation biomeId, net.minecraft.world.level.biome.Biome biome) {
+        java.util.Optional<ru.rorcik.core.zone.TemperatureZone> coreZone = ru.rorcik.core.zone.BiomeZoneRegistry.getZone(biomeId);
         if (coreZone.isPresent()) return coreZone.get();
         float temp = biome.getBaseTemperature();
-        if (temp < 0.15f) return TemperatureZone.COLD;
-        if (temp < 0.45f) return TemperatureZone.COOL;
-        if (temp < 0.75f) return TemperatureZone.NEUTRAL;
-        if (temp < 0.95f) return TemperatureZone.WARM;
-        return TemperatureZone.HOT;
+        if (temp < 0.15f) return ru.rorcik.core.zone.TemperatureZone.COLD;
+        if (temp < 0.45f) return ru.rorcik.core.zone.TemperatureZone.COOL;
+        if (temp < 0.75f) return ru.rorcik.core.zone.TemperatureZone.NEUTRAL;
+        if (temp < 0.95f) return ru.rorcik.core.zone.TemperatureZone.WARM;
+        return ru.rorcik.core.zone.TemperatureZone.HOT;
     }
 }

@@ -40,8 +40,6 @@ public class ModReloadListener {
         CityGenerationContextRegistry.clear();
         PlayerProximityTracker.reset();
 
-        // >>> FIX: обязательно дреним очередь journal writer'а на shutdown,
-        // иначе теряются последние 5–15 секунд прогресса генерации.
         CityJournalWriter.shutdown();
     }
 

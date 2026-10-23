@@ -27,7 +27,8 @@ public class CityBuildScheduler {
     private static final AtomicInteger totalTasksSubmitted = new AtomicInteger(0);
     private static final AtomicInteger totalTasksCompleted = new AtomicInteger(0);
     private static final Map<String, CityJournal> ACTIVE_JOURNALS = new ConcurrentHashMap<>();
-    private static final int MAX_CHUNK_RETRIES = 10;
+
+    private static final int MAX_CHUNK_RETRIES = 15; 
     private static final int MAX_EXECUTION_RETRIES = 3;
 
     public static synchronized void initialize() {
@@ -62,11 +63,6 @@ public class CityBuildScheduler {
         });
     }
 
-    /**
-     * Возвращает true, если задача(и) поставлены в очередь или город уже завершён.
-     * Возвращает false, если стартовать не удалось (нет контекста, не удалось
-     * восстановить журнал).
-     */
     public static boolean startCityGeneration(PlayerProximityTracker.CityInfo city, ServerLevel level,
                                               CityGenerationContext context, int playerX, int playerZ) {
         if (!active.get()) initialize();
@@ -77,8 +73,6 @@ public class CityBuildScheduler {
             ACTIVE_JOURNALS.put(city.cityId, journal);
         }
 
-        // >>> FIX: журнал с seed=0 — восстанавливаем из переданного контекста
-        // (recovers after crashes / потерянных файлов / регрессий, как сейчас).
         if (journal.getSeed() == 0) {
             if (context != null) {
                 LOGGER.warn("Warn: [SCHEDULER] Journal for city '{}' has no seed. Rebuilding from context...", city.cityId);
@@ -127,16 +121,8 @@ public class CityBuildScheduler {
         RandomSource random = RandomSource.create(journal.getSeed());
 
         PhaseBuilder phaseBuilder = new PhaseBuilder(
-                level,
-                roadNetwork,
-                random,
-                pendingSlots,
-                baseY,
-                allNodeMap,
-                allStraightPositions,
-                city.centerX,
-                city.centerZ,
-                journal
+                level, roadNetwork, random, pendingSlots, baseY,
+                allNodeMap, allStraightPositions, city.centerX, city.centerZ, journal
         );
 
         List<AnchorChunkTask> allTasks = ChunkGrouper.groupIntoAnchorChunks(
@@ -184,9 +170,8 @@ public class CityBuildScheduler {
 
             if (retries > MAX_CHUNK_RETRIES) {
                 if (RorcikStructuresModConfig.enableLogging) {
-                    LOGGER.info("Info: [SCHEDULER] Deferring task {} to journal (chunks not loading). Will resume when player approaches.", task);
+                    LOGGER.info("Info: [SCHEDULER] Deferring task {} to journal (chunks not loading). Will retry later.", task);
                 }
-
                 CityJournal journal = ACTIVE_JOURNALS.get(task.cityId());
                 if (journal != null) {
                     for (SlotWork slotWork : task.slotWorks()) {
@@ -201,7 +186,6 @@ public class CityBuildScheduler {
                                 int posX = Integer.parseInt(posParts[0]);
                                 int posY = Integer.parseInt(posParts[1]);
                                 int posZ = Integer.parseInt(posParts[2]);
-
                                 if ("BUILDING".equals(slotWork.slotType())) {
                                     journal.markSlotDeferred(anchorChunkX, anchorChunkZ, posX, posY, posZ);
                                 }
@@ -210,6 +194,14 @@ public class CityBuildScheduler {
                     }
                 }
 
+                task.resetRetryCount();
+                taskQueue.offer(task);
+
+                try {
+                    Thread.sleep(2000); 
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
                 return;
             }
 
@@ -245,10 +237,8 @@ public class CityBuildScheduler {
             for (int dz = 0; dz < 4; dz++) {
                 int chunkX = anchorCX + dx;
                 int chunkZ = anchorCZ + dz;
-                if (!level.hasChunk(chunkX, chunkZ)) {
-                    return false;
-                }
-                ChunkAccess chunk = level.getChunk(chunkX, chunkZ);
+
+                ChunkAccess chunk = level.getChunk(chunkX, chunkZ, ChunkStatus.FULL, true);
                 if (chunk == null || !chunk.getStatus().isOrAfter(ChunkStatus.FULL)) {
                     return false;
                 }
@@ -265,9 +255,11 @@ public class CityBuildScheduler {
                     phasedActions.computeIfAbsent(phase.type(), k -> new ArrayList<>()).add(phase.action());
                 }
             }
+
             for (Map.Entry<PhaseType, List<Runnable>> entry : phasedActions.entrySet()) {
                 for (Runnable action : entry.getValue()) {
                     action.run();
+                    task.incrementCompletedPhases(); 
                 }
             }
 
@@ -303,12 +295,14 @@ public class CityBuildScheduler {
             }
 
             if (RorcikStructuresModConfig.enableLogging) {
-                LOGGER.info("Success: [SCHEDULER] Completed task {}", task);
+                LOGGER.info("Success: [SCHEDULER] Completed task {} (Phases: {}/{})",
+                        task, task.completedPhases(), task.totalPhases());
             }
 
             checkCityCompletion(level, task);
 
         } catch (Exception e) {
+            
             int retries = task.incrementRetryCount();
             if (retries < MAX_EXECUTION_RETRIES) {
                 LOGGER.warn("Warn: [SCHEDULER] Task {} failed (attempt {}/{}). Re-queuing. Reason: {}",
@@ -384,16 +378,20 @@ public class CityBuildScheduler {
     }
 
     public static boolean resumeCityGeneration(PlayerProximityTracker.CityInfo city, ServerLevel level, int playerX, int playerZ) {
-        CityGenerationContext context = CityGenerationContextRegistry.get(city.centerX, city.centerZ);
+        
+        CityGenerationContext context = CityGenerationContextRegistry.get(city.worldId, city.centerX, city.centerZ);
         boolean contextRebuilt = false;
+
         if (context == null) {
             context = ru.rorcik.structures.planning.CityZonePlanner.rebuildContext(level, city.centerX, city.centerZ);
             contextRebuilt = true;
         }
+
         if (context == null) {
             LOGGER.error("Error: [SCHEDULER] Cannot resume city '{}' — no context available", city.cityId);
             return false;
         }
+
         if (RorcikStructuresModConfig.enableLogging) {
             if (contextRebuilt) {
                 LOGGER.info("Info: [SCHEDULER] Resuming city '{}' — context REBUILT (from journal), restoring tasks", city.cityId);

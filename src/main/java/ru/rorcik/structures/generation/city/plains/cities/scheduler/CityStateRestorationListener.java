@@ -29,6 +29,8 @@ public class CityStateRestorationListener {
         int restored = 0;
         int completed = 0;
 
+        String worldId = CityJournal.getWorldId(level);
+
         for (ZoneRegistrySavedData.ReservedZone zone : zoneRegistry.getAllReservedZones()) {
             CityGenerationSavedData.CityGenState state = genData.getState(zone.x(), zone.z());
 
@@ -42,7 +44,7 @@ public class CityStateRestorationListener {
                 continue;
             }
 
-            CityGenerationContext context = CityGenerationContextRegistry.get(zone.x(), zone.z());
+            CityGenerationContext context = CityGenerationContextRegistry.get(worldId, zone.x(), zone.z());
             if (context == null) {
                 context = CityZonePlanner.rebuildContext(level, zone.x(), zone.z());
                 if (context != null) {
@@ -51,7 +53,8 @@ public class CityStateRestorationListener {
             }
 
             Set<Long> affectedChunks = calculateAffectedChunks(context);
-            PlayerProximityTracker.registerCity(zone.x(), zone.z(), affectedChunks);
+
+            PlayerProximityTracker.registerCity(worldId, zone.x(), zone.z(), affectedChunks);
         }
 
         if (RorcikStructuresModConfig.enableLogging) {

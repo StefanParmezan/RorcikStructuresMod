@@ -47,9 +47,7 @@ public class PhaseBuilder {
         for (BuildingSlot slot : slots) slotMap.put(slot.position(), slot);
         this.cityCenterX = cityCenterX;
         this.cityCenterZ = cityCenterZ;
-        // >>> FIX: принимаем уже загруженный журнал из CityBuildScheduler,
-        // а не грузим с диска заново. Раньше здесь был CityJournal.load(...)
-        // создававший второй независимый инстанс — рассинхрон hasRoadAt.
+        
         this.journal = journal;
     }
 
