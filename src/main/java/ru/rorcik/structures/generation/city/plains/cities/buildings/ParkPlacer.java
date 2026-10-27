@@ -48,7 +48,7 @@ public class ParkPlacer {
         return facing.getOpposite();
     }
 
-    public static Set<BlockPos> calculateSlots(BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
+    public static Set<BlockPos> calculateSlots(BlockPos startPos, Direction side, ParkConfig park, Rotation rotation) {
         Set<BlockPos> slots = new HashSet<>();
         int[] baseSize = getParkBaseSize(park);
         boolean rotated90 = isRotated90(rotation);
@@ -70,7 +70,7 @@ public class ParkPlacer {
         }
 
         BlockPos.MutableBlockPos mutPos = new BlockPos.MutableBlockPos();
-        mutPos.set(roadPos).move(depthDir, GeneratorConfig.BUILDING_DISTANCE);
+        mutPos.set(startPos); 
         BlockPos start = mutPos.immutable();
 
         for (int d = 0; d < depthSlots; d++) {
@@ -94,7 +94,9 @@ public class ParkPlacer {
     }
 
     private static BlockPos calculatePlacementOrigin(BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
-        Set<BlockPos> slots = calculateSlots(roadPos, side, park, rotation);
+        
+        BlockPos startPos = roadPos.relative(side, GeneratorConfig.BUILDING_DISTANCE);
+        Set<BlockPos> slots = calculateSlots(startPos, side, park, rotation);
         BlockPos minCorner = calculateMinCorner(slots, roadPos.getY() + park.yOffset());
         int[] baseSize = getParkBaseSize(park);
         return StructureUtils.getCompensatedOrigin(minCorner, rotation, baseSize[0], baseSize[1]);
@@ -185,17 +187,18 @@ public class ParkPlacer {
             return;
         }
         Direction side = calculateSideForRotation(rotation);
-        BlockPos roadPos = playerPos.relative(side.getOpposite(), GeneratorConfig.BUILDING_DISTANCE);
-        Set<BlockPos> slots = calculateSlots(roadPos, side, park, rotation);
+        
+        Set<BlockPos> slots = calculateSlots(playerPos, side, park, rotation);
 
         if (RorcikStructuresModConfig.enableLogging) {
             LOGGER.info("Info: [PARK-TEST] Park: {} | Rotation: {} | Side: {}", parkName, rotation, side);
-            LOGGER.info("Info: [PARK-TEST] PlayerPos: {}", playerPos.toShortString());
-            LOGGER.info("Info: [PARK-TEST] Virtual roadPos: {}", roadPos.toShortString());
+            LOGGER.info("Info: [PARK-TEST] StartPos: {}", playerPos.toShortString());
             for (BlockPos s : slots) {
                 LOGGER.info("Info: [PARK-TEST]   Slot: {}", s.toShortString());
             }
         }
+
+        BlockPos roadPos = playerPos.relative(side.getOpposite(), GeneratorConfig.BUILDING_DISTANCE);
         placePark(level, roadPos, side, park, rotation);
     }
 }

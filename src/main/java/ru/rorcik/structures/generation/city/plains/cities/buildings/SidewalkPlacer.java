@@ -25,77 +25,21 @@ public class SidewalkPlacer {
     private static final String PARKS_CATEGORY = "parks";
     private static final String PLATFORM_CATEGORY = "platforms";
 
-    public static List<Runnable> collectSidewalkActions(
-            List<BuildingSlot> slots,
-            ServerLevel level,
-            RandomSource random
-    ) {
-        List<Runnable> actions = new ArrayList<>(slots.size());
-        Map<BlockPos, BuildingSlot> slotMap = new HashMap<>(slots.size());
-        for (BuildingSlot slot : slots) {
-            slotMap.put(slot.position(), slot);
-        }
-
-        Set<Long> processedPairs = new HashSet<>();
-        int sidewalksAdded = 0;
-        int skippedPark = 0;
-        int skippedPlatform = 0;
-        int skippedNoNeighbor = 0;
-        int skippedDifferentRow = 0;
-
-        for (BuildingSlot slot : slots) {
-            if (slot.category().equals(PARKS_CATEGORY)) {
-                skippedPark++;
-                continue;
-            }
-            if (slot.category().equals(PLATFORM_CATEGORY)) {
-                skippedPlatform++;
-                continue;
-            }
-
-            Direction rightSide = getRightSide(slot.roadSide());
-            BlockPos neighborPos = slot.position().relative(rightSide, GeneratorConfig.ROAD_STEP);
-            BuildingSlot neighbor = slotMap.get(neighborPos);
-
-            if (neighbor == null) {
-                skippedNoNeighbor++;
-                continue;
-            }
-            if (neighbor.category().equals(PARKS_CATEGORY)
-                    || neighbor.category().equals(PLATFORM_CATEGORY)) {
-                continue;
-            }
-            if (neighbor.roadSide() != slot.roadSide()) {
-                skippedDifferentRow++;
-                continue;
-            }
-
-            long pairKey = pairKey(slot.position(), neighborPos);
-            if (processedPairs.contains(pairKey)) {
-                continue;
-            }
-            processedPairs.add(pairKey);
-            sidewalksAdded++;
-            actions.add(() -> placeSidewalk(level, slot, random));
-        }
-
-        if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Info: [SIDEWALK] Collected {} sidewalk actions (skipped: park={}, platform={}, no_neighbor={}, different_row={})",
-                    sidewalksAdded, skippedPark, skippedPlatform, skippedNoNeighbor, skippedDifferentRow);
-        }
-        return actions;
-    }
-
-    private static long pairKey(BlockPos a, BlockPos b) {
-        int hashA = a.hashCode();
-        int hashB = b.hashCode();
-        return hashA < hashB
-                ? ((long) hashA << 32) | (hashB & 0xFFFFFFFFL)
-                : ((long) hashB << 32) | (hashA & 0xFFFFFFFFL);
-    }
-
     public static void placeSidewalkForSlot(ServerLevel level, BuildingSlot slot, RandomSource random) {
-        if (slot.category().equals("parks") || slot.category().equals("platforms")) return;
+        if (slot.category().equals(PARKS_CATEGORY) || slot.category().equals(PLATFORM_CATEGORY)) {
+            return;
+        }
+
+        Direction rightSide = getRightSide(slot.roadSide());
+        BlockPos neighborPos = slot.position().relative(rightSide, GeneratorConfig.ROAD_STEP);
+
+        if (slot.position().hashCode() > neighborPos.hashCode()) {
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.debug("Debug: [SIDEWALK] Skipping sidewalk placement at {}, neighbor will handle it or it's city edge", slot.position().toShortString());
+            }
+            return;
+        }
+
         placeSidewalk(level, slot, random);
     }
 
@@ -132,20 +76,26 @@ public class SidewalkPlacer {
         StructureTemplate template = templateOpt.get();
         BlockPos size = new BlockPos(template.getSize());
         Rotation sidewalkRotation = getSidewalkRotation(slot.roadSide());
+
         BlockPos sidewalkPos = calculateSidewalkPosition(slot.position(), slot.roadSide());
         BlockPos compensated = StructureUtils.getCompensatedOrigin(
                 sidewalkPos, sidewalkRotation, size.getX(), size.getZ()
         );
+
         StructureUtils.placeStructure(level, compensated, nbtPath, sidewalkRotation, false, false);
+
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("Success: [SIDEWALK] Placed sidewalk at {} (roadSide: {})", compensated.toShortString(), slot.roadSide());
+        }
     }
 
     private static BlockPos calculateSidewalkPosition(BlockPos slotPos, Direction roadSide) {
         return switch (roadSide) {
             case SOUTH -> slotPos.offset(61, -1, 0);
             case NORTH -> slotPos.offset(-61, -1, 0);
-            case EAST -> slotPos.offset(0, -1, -61);
-            case WEST -> slotPos.offset(0, -1, 125);
-            default -> slotPos;
+            case EAST  -> slotPos.offset(0, -1, -61);
+            case WEST  -> slotPos.offset(0, -1, 61);  
+            default    -> slotPos;
         };
     }
 
@@ -153,17 +103,17 @@ public class SidewalkPlacer {
         return switch (roadSide) {
             case SOUTH -> Direction.EAST;
             case NORTH -> Direction.WEST;
-            case EAST -> Direction.NORTH;
-            case WEST -> Direction.SOUTH;
-            default -> Direction.EAST;
+            case EAST  -> Direction.NORTH;
+            case WEST  -> Direction.SOUTH;
+            default    -> Direction.EAST;
         };
     }
 
     private static Rotation getSidewalkRotation(Direction roadSide) {
         return switch (roadSide) {
             case SOUTH, NORTH -> Rotation.NONE;
-            case EAST, WEST -> Rotation.CLOCKWISE_90;
-            default -> Rotation.NONE;
+            case EAST, WEST   -> Rotation.CLOCKWISE_90;
+            default           -> Rotation.NONE;
         };
     }
 

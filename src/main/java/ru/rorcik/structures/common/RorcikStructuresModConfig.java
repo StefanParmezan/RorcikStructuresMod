@@ -68,7 +68,6 @@ public class RorcikStructuresModConfig {
 
     public static final ForgeConfigSpec.BooleanValue ENABLE_ROAD_DECORATIONS;
 
-    // >>> FIX: Координаты спавна городов из конфига
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> PLAINS_CITY_COORDS;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> DESERT_CITY_COORDS;
 
@@ -125,7 +124,6 @@ public class RorcikStructuresModConfig {
 
     public static boolean enableRoadDecorations;
 
-    // >>> FIX: Публичные списки для использования в листенере
     public static List<String> plainsCityCoords;
     public static List<String> desertCityCoords;
 
@@ -192,7 +190,6 @@ public class RorcikStructuresModConfig {
         PROXIMITY_CHECK_INTERVAL_TICKS = BUILDER.comment("How often (in ticks) to check player position").defineInRange("proximityCheckIntervalTicks", 10, 1, 100);
         BUILDER.pop();
 
-        // >>> FIX: Секция координат спавна городов
         BUILDER.comment("City Spawn Coordinates").push("spawn_coordinates");
         PLAINS_CITY_COORDS = BUILDER.comment(
                 "List of coordinates for Plains cities in 'x,z' format.",
@@ -271,7 +268,6 @@ public class RorcikStructuresModConfig {
         maxPendingTasks = MAX_PENDING_TASKS.get();
         proximityCheckIntervalTicks = PROXIMITY_CHECK_INTERVAL_TICKS.get();
 
-        // >>> FIX: Чтение и очистка списков координат
         plainsCityCoords = new java.util.ArrayList<>();
         for (Object obj : PLAINS_CITY_COORDS.get()) {
             if (obj instanceof String) plainsCityCoords.add((String) obj);

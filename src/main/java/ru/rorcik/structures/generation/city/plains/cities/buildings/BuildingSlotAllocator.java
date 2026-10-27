@@ -364,7 +364,7 @@ public class BuildingSlotAllocator {
             ServerLevel level,
             BlockPos nodePos,
             Direction side,
-            BlockPos buildingPos,
+            BlockPos buildingPos, 
             Map<BlockPos, BuildingSlot> occupiedSlots,
             List<BuildingSlot> slots,
             RandomSource random,
@@ -380,7 +380,8 @@ public class BuildingSlotAllocator {
             ParkConfig park = availableParks.get(random.nextInt(availableParks.size()));
             boolean isSquare = park.size()[0] == park.size()[2];
             Rotation rotation = ParkPlacer.calculateRotationForSide(side);
-            Set<BlockPos> parkSlots = ParkPlacer.calculateSlots(nodePos, side, park, rotation);
+
+            Set<BlockPos> parkSlots = ParkPlacer.calculateSlots(buildingPos, side, park, rotation);
 
             boolean canPlace = true;
             int conflicts = 0;

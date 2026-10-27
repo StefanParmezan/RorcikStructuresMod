@@ -18,11 +18,14 @@ import ru.rorcik.core.zone.TemperatureZone;
 import ru.rorcik.core.zone.ZoneRegistrySavedData;
 import ru.rorcik.structures.city.CityType;
 import ru.rorcik.structures.common.RorcikStructuresModConfig;
+import ru.rorcik.structures.data.city.plains.config_loaders.ParkConfigLoader;
 import ru.rorcik.structures.data.city.plains.config_loaders.RoadConfigLoader;
 import ru.rorcik.structures.data.city.plains.containers.BuildingSlot;
+import ru.rorcik.structures.data.city.plains.containers.ParkConfig;
 import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 import ru.rorcik.structures.data.city.plains.containers.RoadNode;
 import ru.rorcik.structures.generation.city.plains.cities.buildings.BuildingSlotAllocator;
+import ru.rorcik.structures.generation.city.plains.cities.buildings.ParkPlacer;
 import ru.rorcik.structures.generation.city.plains.cities.buildings.ParkWorldTracker;
 import ru.rorcik.structures.generation.city.plains.cities.roads.RoadGraphBuilder;
 import ru.rorcik.structures.generation.city.plains.cities.scheduler.*;
@@ -74,7 +77,6 @@ public class CityZonePlanner {
             int anchorChunkSize = isDesert ? 2 : 4;
             DryRunResult dryRun = isDesert ? performDesertDryRun(level, centerX, centerZ, type.targetHeight) : performDryRun(level, centerX, centerZ, type.targetHeight);
 
-            // >>> FIX: Передаем isDesert, чтобы добавить буфер в 1 чанк для пустынных городов
             Set<Long> affectedChunks = calculateExactChunks(dryRun, anchorChunkSize, isDesert);
 
             CityJournal journal = CityJournal.load(centerX, centerZ, type.id, level);
@@ -208,27 +210,41 @@ public class CityZonePlanner {
 
     private record DryRunResult(long seed, Map<BlockPos, RoadNode> nodeMap, Set<BlockPos> straightPositions, List<BuildingSlot> slots, RoadNetwork roadNetwork, int baseY) {}
 
-    // >>> FIX: Добавлен параметр isDesert для расширения зоны на 1 чанк
     private static Set<Long> calculateExactChunks(DryRunResult dryRun, int anchorChunkSize, boolean isDesert) {
         Set<Long> chunks = new HashSet<>();
+
         for (Map.Entry<BlockPos, RoadNode> entry : dryRun.nodeMap.entrySet()) {
             List<Direction> connections = entry.getValue().getAllConnections();
             RoadConfigLoader.RoadMapEntry roadEntry = RoadConfigLoader.findRoadForConnections(connections);
             if (roadEntry != null && "st".equals(roadEntry.type())) continue;
             addStructureChunks(chunks, entry.getKey(), 4);
         }
+
         for (BlockPos pos : dryRun.straightPositions) {
             addStructureChunks(chunks, pos, 4);
         }
+
         for (BuildingSlot slot : dryRun.slots) {
-            if (!slot.category().equals("platforms")) {
+            if (slot.category().equals("platforms")) {
+                continue;
+            }
+
+            if (slot.category().equals("parks")) {
+                ParkConfig park = ParkConfigLoader.getPark(slot.buildingName());
+                if (park != null) {
+                    
+                    Set<BlockPos> parkSlots = ParkPlacer.calculateSlots(slot.position(), slot.roadSide(), park, slot.rotation());
+                    for (BlockPos parkSlotPos : parkSlots) {
+                        addStructureChunks(chunks, parkSlotPos, anchorChunkSize);
+                    }
+                } else {
+                    addStructureChunks(chunks, slot.position(), anchorChunkSize);
+                }
+            } else {
                 addStructureChunks(chunks, slot.position(), anchorChunkSize);
             }
         }
 
-        // >>> FIX: Для пустынных городов добавляем буфер в 1 чанк вокруг всей зоны.
-        // Это автоматически расширит Bounding Box в GlobalCityRegistry, позволив функции
-        // плотности RWG плавно выровнять ландшафт по краям без резких переходов.
         if (isDesert) {
             Set<Long> bufferedChunks = new HashSet<>();
             for (long chunkKey : chunks) {

@@ -27,7 +27,6 @@ public class AutoCityReservationListener {
 
     private record TestCityTask(int x, int z, CityType type) {}
 
-    // Список задач формируется динамически на основе конфига
     private static List<TestCityTask> TEST_CITIES = new ArrayList<>();
 
     private static final Set<String> SUCCESSFUL_RESERVATIONS = ConcurrentHashMap.newKeySet();
@@ -36,7 +35,6 @@ public class AutoCityReservationListener {
 
     private static volatile boolean isFullyInitialized = false;
 
-    // >>> FIX: Метод для безопасного построения списка задач из конфига
     private static void rebuildTaskList() {
         List<TestCityTask> newTasks = new ArrayList<>();
 
@@ -81,7 +79,6 @@ public class AutoCityReservationListener {
 
         if (!StructureCache.isInitialized()) return;
 
-        // Пересобираем список при первом тике, чтобы учесть возможные изменения конфига
         if (TEST_CITIES.isEmpty()) {
             rebuildTaskList();
         }
@@ -140,7 +137,7 @@ public class AutoCityReservationListener {
         SUCCESSFUL_RESERVATIONS.removeIf(key -> key.startsWith(worldId + "_"));
         ATTEMPT_COUNTS.keySet().removeIf(key -> key.startsWith(worldId + "_"));
         isFullyInitialized = false;
-        TEST_CITIES = new ArrayList<>(); // Сброс для корректного перечитывания конфига в новом мире
+        TEST_CITIES = new ArrayList<>(); 
 
         if (RorcikStructuresModConfig.enableLogging) {
             LOGGER.info("Info: [AUTO-RESERVE] Cleared attempt data and reset initialization flag for world {}", worldId);
