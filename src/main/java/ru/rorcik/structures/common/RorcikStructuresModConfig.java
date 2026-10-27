@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.generation.GeneratorConfig;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
@@ -62,10 +63,14 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.IntValue WORKER_POOL_SIZE;
     public static final ForgeConfigSpec.IntValue BUFFER_DISTANCE;
     public static final ForgeConfigSpec.IntValue ABANDON_DISTANCE;
-    public static final ForgeConfigSpec.IntValue MAX_PENDING_TASKS; 
+    public static final ForgeConfigSpec.IntValue MAX_PENDING_TASKS;
     public static final ForgeConfigSpec.IntValue PROXIMITY_CHECK_INTERVAL_TICKS;
 
     public static final ForgeConfigSpec.BooleanValue ENABLE_ROAD_DECORATIONS;
+
+    // >>> FIX: Координаты спавна городов из конфига
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> PLAINS_CITY_COORDS;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> DESERT_CITY_COORDS;
 
     public static final ForgeConfigSpec SPEC;
 
@@ -119,6 +124,10 @@ public class RorcikStructuresModConfig {
     public static int proximityCheckIntervalTicks;
 
     public static boolean enableRoadDecorations;
+
+    // >>> FIX: Публичные списки для использования в листенере
+    public static List<String> plainsCityCoords;
+    public static List<String> desertCityCoords;
 
     static {
         BUILDER.comment("General mod settings").push("general");
@@ -179,10 +188,21 @@ public class RorcikStructuresModConfig {
         WORKER_POOL_SIZE = BUILDER.comment("Number of worker threads for parallel city generation. -1 = auto-detect").defineInRange("workerPoolSize", -1, -1, 32);
         BUFFER_DISTANCE = BUILDER.comment("Distance in blocks at which city generation starts").defineInRange("bufferDistance", 96, 32, 512);
         ABANDON_DISTANCE = BUILDER.comment("Distance in blocks at which city generation pauses").defineInRange("abandonDistance", 192, 64, 1024);
-
         MAX_PENDING_TASKS = BUILDER.comment("Maximum number of anchor chunk tasks in queue").defineInRange("maxPendingTasks", 512, 16, 4096);
-
         PROXIMITY_CHECK_INTERVAL_TICKS = BUILDER.comment("How often (in ticks) to check player position").defineInRange("proximityCheckIntervalTicks", 10, 1, 100);
+        BUILDER.pop();
+
+        // >>> FIX: Секция координат спавна городов
+        BUILDER.comment("City Spawn Coordinates").push("spawn_coordinates");
+        PLAINS_CITY_COORDS = BUILDER.comment(
+                "List of coordinates for Plains cities in 'x,z' format.",
+                "Example: ['11000,0', '-11000,0']"
+        ).defineList("plains_city_coordinates", Arrays.asList("-11000,0", "11000,0", "0,11000", "0,-11000"), obj -> obj instanceof String);
+
+        DESERT_CITY_COORDS = BUILDER.comment(
+                "List of coordinates for Desert cities in 'x,z' format.",
+                "Example: ['19000,0', '-19000,0']"
+        ).defineList("desert_city_coordinates", Arrays.asList("-19000,0", "19000,0", "0,19000", "0,-19000"), obj -> obj instanceof String);
         BUILDER.pop();
 
         SPEC = BUILDER.build();
@@ -250,5 +270,16 @@ public class RorcikStructuresModConfig {
         abandonDistance = ABANDON_DISTANCE.get();
         maxPendingTasks = MAX_PENDING_TASKS.get();
         proximityCheckIntervalTicks = PROXIMITY_CHECK_INTERVAL_TICKS.get();
+
+        // >>> FIX: Чтение и очистка списков координат
+        plainsCityCoords = new java.util.ArrayList<>();
+        for (Object obj : PLAINS_CITY_COORDS.get()) {
+            if (obj instanceof String) plainsCityCoords.add((String) obj);
+        }
+
+        desertCityCoords = new java.util.ArrayList<>();
+        for (Object obj : DESERT_CITY_COORDS.get()) {
+            if (obj instanceof String) desertCityCoords.add((String) obj);
+        }
     }
 }

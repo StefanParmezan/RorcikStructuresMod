@@ -30,12 +30,7 @@ public class CityJournalWriter {
                     if (journal != null) {
                         journal.save();
                         lastWriteTime = System.currentTimeMillis();
-                    } else {
-                        Thread.sleep(100);
                     }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
                 } catch (Exception e) {
                     LOGGER.error("Error: [JOURNAL-WRITER] Failed to write journal", e);
                 }

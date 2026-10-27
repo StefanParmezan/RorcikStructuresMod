@@ -40,6 +40,8 @@ public class BuildingPlacer {
     public static void placeBuilding(ServerLevel level, BuildingSlot slot) {
         if ("houses".equals(slot.category())) {
             HOUSE_GENERATOR.generate(level, slot.position(), slot.buildingName(), slot.rotation());
+        } else if ("desert".equals(slot.category())) {
+            placeDesertBuilding(level, slot);
         } else if (PLATFORM_CATEGORY.equals(slot.category())) {
             placePlatform(level, slot);
         } else if (PARKS_CATEGORY.equals(slot.category())) {
@@ -49,29 +51,129 @@ public class BuildingPlacer {
         }
     }
 
-    public static void placeCompleteHouse(ServerLevel level, BuildingSlot slot) {
+    private static void placeDesertBuilding(ServerLevel level, BuildingSlot slot) {
+        String nbtPath = ModPaths.desertHouseNbtPath(slot.buildingName());
+        ResourceLocation location = ResourceLocation.tryParse(nbtPath);
+        if (location == null) {
+            LOGGER.error("Error: [PLACE] Invalid resource location for desert building: {}", nbtPath);
+            return;
+        }
+
+        Optional<StructureTemplate> templateOpt = StructureCache.get(location);
+        if (templateOpt.isEmpty()) {
+            LOGGER.error("Error: [PLACE] CRITICAL: Desert structure template NOT FOUND in cache for: '{}'. This is why the area is empty!", nbtPath);
+            return;
+        }
+
+        StructureTemplate template = templateOpt.get();
+        BlockPos size = new BlockPos(template.getSize());
+        
+        BlockPos origin = slot.position().offset(0, BUILDING_Y_OFFSET, 0);
+        BlockPos compensated = StructureUtils.getCompensatedOrigin(
+                origin, slot.rotation(), size.getX(), size.getZ()
+        );
+        StructureUtils.placeStructure(level, compensated, nbtPath, slot.rotation(), false, false);
+    }
+
+    private static void placePark(ServerLevel level, BuildingSlot slot) {
+        ParkConfig park = ParkConfigLoader.getPark(slot.buildingName());
+        if (park == null) {
+            LOGGER.error("Error: [PLACE] Park config not found for: {}", slot.buildingName());
+            return;
+        }
+        BlockPos buildingPos = slot.position();
+        Direction side = slot.roadSide();
+        BlockPos roadPos = buildingPos.relative(side.getOpposite(), GeneratorConfig.BUILDING_DISTANCE);
+        ParkPlacer.placePark(level, roadPos, side, park, slot.rotation());
+    }
+
+    private static void placeSimpleBuilding(ServerLevel level, BuildingSlot slot) {
+        String nbtPath = ModPaths.buildingNbtPath(slot.category(), slot.buildingName());
+        ResourceLocation location = ResourceLocation.tryParse(nbtPath);
+        if (location == null) {
+            LOGGER.error("Error: [PLACE] Invalid resource location for building: {}", nbtPath);
+            return;
+        }
+
+        Optional<StructureTemplate> templateOpt = StructureCache.get(location);
+        if (templateOpt.isEmpty()) {
+            LOGGER.error("Error: [PLACE] CRITICAL: Structure template NOT FOUND in cache for: '{}'. This is why the area is empty!", nbtPath);
+            return;
+        }
+
+        StructureTemplate template = templateOpt.get();
+        BlockPos size = new BlockPos(template.getSize());
+        BlockPos origin = slot.position().offset(0, BUILDING_Y_OFFSET, 0);
+        BlockPos compensated = StructureUtils.getCompensatedOrigin(
+                origin, slot.rotation(), size.getX(), size.getZ()
+        );
+        StructureUtils.placeStructure(level, compensated, nbtPath, slot.rotation(), false, false);
+    }
+
+    private static void placePlatform(ServerLevel level, BuildingSlot slot) {
+        String nbtPath = ModPaths.platformNbtPath(slot.buildingName());
+        ResourceLocation location = ResourceLocation.tryParse(nbtPath);
+        if (location == null) {
+            LOGGER.error("Error: [PLACE] Invalid resource location for platform: {}", nbtPath);
+            return;
+        }
+
+        Optional<StructureTemplate> templateOpt = StructureCache.get(location);
+        if (templateOpt.isEmpty()) {
+            LOGGER.error("Error: [PLACE] CRITICAL: Platform template NOT FOUND in cache for: '{}'. This is why the area is empty!", nbtPath);
+            return;
+        }
+
+        StructureTemplate template = templateOpt.get();
+        BlockPos size = new BlockPos(template.getSize());
+        BlockPos origin = slot.position().offset(0, BUILDING_Y_OFFSET, 0);
+        BlockPos compensated = StructureUtils.getCompensatedOrigin(
+                origin, slot.rotation(), size.getX(), size.getZ()
+        );
+        StructureUtils.placeStructure(level, compensated, nbtPath, slot.rotation(), false, false);
+    }
+
+    public static void placeBuildingShell(ServerLevel level, BuildingSlot slot) {
+        if ("houses".equals(slot.category())) {
+            placeHouseShell(level, slot);
+        } else {
+            placeBuilding(level, slot);
+        }
+    }
+
+    private static void placeHouseShell(ServerLevel level, BuildingSlot slot) {
         String houseType = slot.buildingName().toLowerCase();
         HouseConfig config = HouseConfigLoader.getConfig(houseType);
-        if (config == null) return;
+        if (config == null) {
+            LOGGER.error("Error: [PLACE] House config not found for: {}", houseType);
+            return;
+        }
 
         long uniqueSeed = level.getSeed() ^ slot.position().hashCode();
         RandomSource random = RandomSource.create(uniqueSeed);
 
         int houseDecor = config.houseDecorCount() > 0 ? random.nextInt(config.houseDecorCount()) : 0;
         String houseNbt = houseType + "_" + houseDecor;
+
         BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(slot.position(), config);
         BlockPos housePlacementOrigin = HousePositionCalculator.calculatePlacementOrigin(
                 houseOrigin, slot.rotation(), config.size()[0], config.size()[2]
         );
-        StructureUtils.placeStructure(level, housePlacementOrigin,
-                ModPaths.houseNbtPath(houseNbt), slot.rotation(), false, false);
 
+        StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseNbt), slot.rotation(), false, false);
+    }
+
+    public static void placeHouseRoomsOnly(ServerLevel level, BuildingSlot slot, RandomSource random) {
+        String houseType = slot.buildingName().toLowerCase();
+        HouseConfig config = HouseConfigLoader.getConfig(houseType);
+        if (config == null) return;
+
+        BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(slot.position(), config);
         int houseSizeX = config.size()[0];
         int houseSizeZ = config.size()[2];
 
         for (RoomSlot room : config.rooms()) {
-            placeAllFloorsForRoom(level, config, room, houseOrigin, slot.rotation(),
-                    random, houseSizeX, houseSizeZ);
+            placeAllFloorsForRoom(level, config, room, houseOrigin, slot.rotation(), random, houseSizeX, houseSizeZ);
         }
     }
 
@@ -135,109 +237,5 @@ public class BuildingPlacer {
             sb.append("_v");
         }
         return sb.toString();
-    }
-
-    private static void placePark(ServerLevel level, BuildingSlot slot) {
-        ParkConfig park = ParkConfigLoader.getPark(slot.buildingName());
-        if (park == null) {
-            LOGGER.error("Error: [PLACE] Park config not found for: {}", slot.buildingName());
-            return;
-        }
-        BlockPos buildingPos = slot.position();
-        Direction side = slot.roadSide();
-        BlockPos roadPos = buildingPos.relative(side.getOpposite(), GeneratorConfig.BUILDING_DISTANCE);
-        ParkPlacer.placePark(level, roadPos, side, park, slot.rotation());
-    }
-
-    private static void placeSimpleBuilding(ServerLevel level, BuildingSlot slot) {
-        String nbtPath = ModPaths.buildingNbtPath(slot.category(), slot.buildingName());
-        ResourceLocation location = ResourceLocation.tryParse(nbtPath);
-        if (location == null) {
-            LOGGER.error("Error: [PLACE] Invalid resource location for building: {}", nbtPath);
-            return;
-        }
-
-        Optional<StructureTemplate> templateOpt = StructureCache.get(location);
-        if (templateOpt.isEmpty()) {
-            
-            LOGGER.error("Error: [PLACE] CRITICAL: Structure template NOT FOUND in cache for: '{}'. This is why the area is empty!", nbtPath);
-            return;
-        }
-
-        StructureTemplate template = templateOpt.get();
-        BlockPos size = new BlockPos(template.getSize());
-        BlockPos origin = slot.position().offset(0, BUILDING_Y_OFFSET, 0);
-        BlockPos compensated = StructureUtils.getCompensatedOrigin(
-                origin, slot.rotation(), size.getX(), size.getZ()
-        );
-        StructureUtils.placeStructure(level, compensated, nbtPath, slot.rotation(), false, false);
-    }
-
-    private static void placePlatform(ServerLevel level, BuildingSlot slot) {
-        String nbtPath = ModPaths.platformNbtPath(slot.buildingName());
-        ResourceLocation location = ResourceLocation.tryParse(nbtPath);
-        if (location == null) {
-            LOGGER.error("Error: [PLACE] Invalid resource location for platform: {}", nbtPath);
-            return;
-        }
-
-        Optional<StructureTemplate> templateOpt = StructureCache.get(location);
-        if (templateOpt.isEmpty()) {
-            
-            LOGGER.error("Error: [PLACE] CRITICAL: Platform template NOT FOUND in cache for: '{}'. This is why the area is empty!", nbtPath);
-            return;
-        }
-
-        StructureTemplate template = templateOpt.get();
-        BlockPos size = new BlockPos(template.getSize());
-        BlockPos origin = slot.position().offset(0, BUILDING_Y_OFFSET, 0);
-        BlockPos compensated = StructureUtils.getCompensatedOrigin(
-                origin, slot.rotation(), size.getX(), size.getZ()
-        );
-        StructureUtils.placeStructure(level, compensated, nbtPath, slot.rotation(), false, false);
-    }
-
-    public static void placeBuildingShell(ServerLevel level, BuildingSlot slot) {
-        if ("houses".equals(slot.category())) {
-            placeHouseShell(level, slot);
-        } else {
-            placeBuilding(level, slot);
-        }
-    }
-
-    private static void placeHouseShell(ServerLevel level, BuildingSlot slot) {
-        String houseType = slot.buildingName().toLowerCase();
-        HouseConfig config = HouseConfigLoader.getConfig(houseType);
-        if (config == null) {
-            LOGGER.error("Error: [PLACE] House config not found for: {}", houseType);
-            return;
-        }
-
-        long uniqueSeed = level.getSeed() ^ slot.position().hashCode();
-        RandomSource random = RandomSource.create(uniqueSeed);
-
-        int houseDecor = config.houseDecorCount() > 0 ? random.nextInt(config.houseDecorCount()) : 0;
-        String houseNbt = houseType + "_" + houseDecor;
-
-        BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(slot.position(), config);
-        BlockPos housePlacementOrigin = HousePositionCalculator.calculatePlacementOrigin(
-                houseOrigin, slot.rotation(), config.size()[0], config.size()[2]
-        );
-
-        StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseNbt), slot.rotation(), false, false);
-    }
-
-    public static void placeHouseRoomsOnly(ServerLevel level, BuildingSlot slot, RandomSource random) {
-        String houseType = slot.buildingName().toLowerCase();
-        HouseConfig config = HouseConfigLoader.getConfig(houseType);
-        if (config == null) return;
-
-        BlockPos houseOrigin = HousePositionCalculator.calculateHouseOrigin(slot.position(), config);
-        int houseSizeX = config.size()[0];
-        int houseSizeZ = config.size()[2];
-
-        for (RoomSlot room : config.rooms()) {
-            placeAllFloorsForRoom(level, config, room, houseOrigin, slot.rotation(), random, houseSizeX, houseSizeZ);
-        }
     }
 }

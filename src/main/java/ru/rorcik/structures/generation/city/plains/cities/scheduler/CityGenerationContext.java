@@ -20,10 +20,11 @@ public class CityGenerationContext {
     private final RoadNetwork roadNetwork;
     private final long seed;
     private final int baseY;
+    private final int anchorChunkSize; 
 
     public CityGenerationContext(String worldId, int centerX, int centerZ, String typeId, int targetHeight,
                                  Map<BlockPos, RoadNode> nodeMap, Set<BlockPos> straightPositions,
-                                 List<BuildingSlot> slots, RoadNetwork roadNetwork, long seed, int baseY) {
+                                 List<BuildingSlot> slots, RoadNetwork roadNetwork, long seed, int baseY, int anchorChunkSize) {
         this.worldId = worldId;
         this.centerX = centerX;
         this.centerZ = centerZ;
@@ -35,6 +36,7 @@ public class CityGenerationContext {
         this.roadNetwork = roadNetwork;
         this.seed = seed;
         this.baseY = baseY;
+        this.anchorChunkSize = anchorChunkSize;
     }
 
     public String cityId() {
@@ -52,4 +54,5 @@ public class CityGenerationContext {
     public long seed() { return seed; }
     public int baseY() { return baseY; }
     public String worldId() { return worldId; }
+    public int anchorChunkSize() { return anchorChunkSize; } 
 }

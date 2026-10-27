@@ -1,16 +1,19 @@
 package ru.rorcik.structures.generation.city.plains.cities.scheduler;
 
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.server.ServerLifecycleHooks;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.common.RorcikStructuresModConfig;
 import ru.rorcik.structures.generation.GeneratorConfig;
+
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -25,41 +28,43 @@ public class PlayerProximityTracker {
     public static class CityInfo {
         public final String worldId;
         public final String cityId;
+        public final String typeId;
         public final int centerX;
         public final int centerZ;
         public final Set<Long> affectedChunks;
         public CityState state;
 
-        public CityInfo(String worldId, int centerX, int centerZ, Set<Long> affectedChunks) {
+        public CityInfo(String worldId, int centerX, int centerZ, String typeId, Set<Long> affectedChunks) {
             this.worldId = worldId;
             this.centerX = centerX;
             this.centerZ = centerZ;
+            this.typeId = typeId;
             this.affectedChunks = Collections.unmodifiableSet(new HashSet<>(affectedChunks));
-            
             this.cityId = worldId + "_city@" + centerX + "," + centerZ;
             this.state = CityState.PENDING;
         }
     }
 
-    public static void registerCity(String worldId, int centerX, int centerZ, Set<Long> affectedChunks) {
-        CityInfo info = new CityInfo(worldId, centerX, centerZ, affectedChunks);
+    public static void registerCity(String worldId, int centerX, int centerZ, String typeId, Set<Long> affectedChunks) {
+        CityInfo info = new CityInfo(worldId, centerX, centerZ, typeId, affectedChunks);
         ACTIVE_CITIES.put(info.cityId, info);
         if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Info: [PROXIMITY] Registered city '{}' for proximity tracking", info.cityId);
+            LOGGER.info("Info: [PROXIMITY] Registered city '{}' (type: {}) for proximity tracking", info.cityId, typeId);
         }
     }
 
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
+
         tickCounter++;
         if (tickCounter < RorcikStructuresModConfig.proximityCheckIntervalTicks) return;
         tickCounter = 0;
 
-        net.minecraft.server.MinecraftServer server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) return;
+
         ServerLevel level = server.overworld();
-        if (level == null) return;
 
         ServerPlayer player = server.getPlayerList().getPlayers().isEmpty() ? null : server.getPlayerList().getPlayers().get(0);
         if (player == null) return;
@@ -68,6 +73,8 @@ public class PlayerProximityTracker {
         int playerZ = player.getBlockZ();
         int bufferDistance = RorcikStructuresModConfig.bufferDistance;
         int abandonDistance = RorcikStructuresModConfig.abandonDistance;
+
+        CityBuildScheduler.updatePriorities(playerX, playerZ);
 
         Iterator<Map.Entry<String, CityInfo>> iterator = ACTIVE_CITIES.entrySet().iterator();
         while (iterator.hasNext()) {
@@ -82,7 +89,7 @@ public class PlayerProximityTracker {
             CityGenerationSavedData.CityGenState state = genData.getState(city.centerX, city.centerZ);
             if (state != null && state.isComplete()) {
                 city.state = CityState.COMPLETED;
-                iterator.remove(); 
+                iterator.remove();
                 continue;
             }
 

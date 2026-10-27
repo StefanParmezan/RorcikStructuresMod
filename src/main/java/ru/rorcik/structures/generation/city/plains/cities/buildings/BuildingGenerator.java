@@ -55,6 +55,9 @@ public class BuildingGenerator implements IStructureGenerator {
                         addTemplate(templates, ModPaths.houseNbtPath(houseType + "_" + decor));
                     }
                 }
+            } else if (slot.category().equals("desert")) {
+                
+                addTemplate(templates, ModPaths.desertHouseNbtPath(slot.buildingName()));
             } else if (slot.category().equals("parks")) {
                 addTemplate(templates, ModPaths.parkNbtPath(slot.buildingName()));
             } else if (slot.category().equals("platforms")) {

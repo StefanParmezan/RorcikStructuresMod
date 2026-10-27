@@ -11,7 +11,6 @@ import ru.rorcik.core.zone.ZoneRegistrySavedData;
 import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.common.RorcikStructuresModConfig;
 import ru.rorcik.structures.planning.CityZonePlanner;
-
 import java.util.Set;
 
 @Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
@@ -28,7 +27,6 @@ public class CityStateRestorationListener {
 
         int restored = 0;
         int completed = 0;
-
         String worldId = CityJournal.getWorldId(level);
 
         for (ZoneRegistrySavedData.ReservedZone zone : zoneRegistry.getAllReservedZones()) {
@@ -44,17 +42,18 @@ public class CityStateRestorationListener {
                 continue;
             }
 
+            String typeId = zone.rules().id();
             CityGenerationContext context = CityGenerationContextRegistry.get(worldId, zone.x(), zone.z());
+
             if (context == null) {
-                context = CityZonePlanner.rebuildContext(level, zone.x(), zone.z());
+                context = CityZonePlanner.rebuildContext(level, zone.x(), zone.z(), typeId);
                 if (context != null) {
                     restored++;
                 }
             }
 
             Set<Long> affectedChunks = calculateAffectedChunks(context);
-
-            PlayerProximityTracker.registerCity(worldId, zone.x(), zone.z(), affectedChunks);
+            PlayerProximityTracker.registerCity(worldId, zone.x(), zone.z(), typeId, affectedChunks);
         }
 
         if (RorcikStructuresModConfig.enableLogging) {
@@ -64,27 +63,26 @@ public class CityStateRestorationListener {
 
     private static Set<Long> calculateAffectedChunks(CityGenerationContext context) {
         if (context == null) return Set.of();
-
         Set<Long> chunks = new java.util.HashSet<>();
         for (net.minecraft.core.BlockPos pos : context.nodeMap().keySet()) {
-            addStructureChunks(chunks, pos);
+            addStructureChunks(chunks, pos, 4); 
         }
         for (net.minecraft.core.BlockPos pos : context.straightPositions()) {
-            addStructureChunks(chunks, pos);
+            addStructureChunks(chunks, pos, 4);
         }
         for (ru.rorcik.structures.data.city.plains.containers.BuildingSlot slot : context.slots()) {
             if (!slot.category().equals("platforms")) {
-                addStructureChunks(chunks, slot.position());
+                addStructureChunks(chunks, slot.position(), context.anchorChunkSize()); 
             }
         }
         return chunks;
     }
 
-    private static void addStructureChunks(Set<Long> chunks, net.minecraft.core.BlockPos pos) {
+    private static void addStructureChunks(Set<Long> chunks, net.minecraft.core.BlockPos pos, int size) {
         int baseChunkX = pos.getX() >> 4;
         int baseChunkZ = pos.getZ() >> 4;
-        for (int dx = 0; dx < 4; dx++) {
-            for (int dz = 0; dz < 4; dz++) {
+        for (int dx = 0; dx < size; dx++) {
+            for (int dz = 0; dz < size; dz++) {
                 long key = ((long)(baseChunkX + dx) << 32) | ((baseChunkZ + dz) & 0xFFFFFFFFL);
                 chunks.add(key);
             }

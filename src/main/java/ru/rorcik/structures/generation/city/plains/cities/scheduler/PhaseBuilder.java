@@ -47,49 +47,51 @@ public class PhaseBuilder {
         for (BuildingSlot slot : slots) slotMap.put(slot.position(), slot);
         this.cityCenterX = cityCenterX;
         this.cityCenterZ = cityCenterZ;
-        
         this.journal = journal;
     }
 
-    public SlotWork buildForRoadNode(RoadNode node, BlockPos pos) {
-        int anchorChunkX = (pos.getX() >> 6) << 2;
-        int anchorChunkZ = (pos.getZ() >> 6) << 2;
+    public SlotWork buildForRoadNode(RoadNode node, BlockPos pos, int anchorChunkSize) {
+        int shift = Integer.numberOfTrailingZeros(anchorChunkSize);
+        int anchorChunkX = (pos.getX() >> (4 + shift)) << shift;
+        int anchorChunkZ = (pos.getZ() >> (4 + shift)) << shift;
         String slotId = anchorChunkX + "," + anchorChunkZ + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
         List<Phase> phases = new ArrayList<>();
         phases.add(new Phase(PhaseType.ROAD, () -> placeRoadForNode(node, pos), collectRoadTemplatesForNode(node)));
         return new SlotWork(slotId, "ROAD_NODE", phases);
     }
 
-    public SlotWork buildForStraightRoad(BlockPos pos) {
-        int anchorChunkX = (pos.getX() >> 6) << 2;
-        int anchorChunkZ = (pos.getZ() >> 6) << 2;
+    public SlotWork buildForStraightRoad(BlockPos pos, int anchorChunkSize) {
+        int shift = Integer.numberOfTrailingZeros(anchorChunkSize);
+        int anchorChunkX = (pos.getX() >> (4 + shift)) << shift;
+        int anchorChunkZ = (pos.getZ() >> (4 + shift)) << shift;
         String slotId = anchorChunkX + "," + anchorChunkZ + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
         List<Phase> phases = new ArrayList<>();
         phases.add(new Phase(PhaseType.ROAD, () -> placeStraightRoad(pos), collectStraightRoadTemplates()));
         return new SlotWork(slotId, "STRAIGHT_ROAD", phases);
     }
 
-    public SlotWork buildForBuildingSlot(BuildingSlot slot) {
+    public SlotWork buildForBuildingSlot(BuildingSlot slot, int anchorChunkSize) {
         BlockPos pos = slot.position();
-        int anchorChunkX = (pos.getX() >> 6) << 2;
-        int anchorChunkZ = (pos.getZ() >> 6) << 2;
+        int shift = Integer.numberOfTrailingZeros(anchorChunkSize);
+        int anchorChunkX = (pos.getX() >> (4 + shift)) << shift;
+        int anchorChunkZ = (pos.getZ() >> (4 + shift)) << shift;
         String slotId = anchorChunkX + "," + anchorChunkZ + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
+
         List<Phase> phases = new ArrayList<>();
         String category = slot.category();
+
         if ("houses".equals(category)) {
             phases.add(new Phase(PhaseType.HOUSE_SHELL,
                     () -> BuildingPlacer.placeBuildingShell(level, slot),
                     BuildingGenerator.collectRequiredBuildTemplates(List.of(slot))));
-            phases.add(new Phase(PhaseType.INSTALL,
-                    () -> {},
-                    Collections.emptySet()));
+            phases.add(new Phase(PhaseType.INSTALL, () -> {}, Collections.emptySet()));
             phases.add(new Phase(PhaseType.ROOMS,
                     () -> BuildingPlacer.placeHouseRoomsOnly(level, slot, createDeterministicRandom(slot.position())),
                     BuildingGenerator.collectRequiredRoomTemplates(List.of(slot))));
             phases.add(new Phase(PhaseType.SIDEWALKS,
                     () -> SidewalkPlacer.placeSidewalkForSlot(level, slot, createDeterministicRandom(slot.position())),
                     SidewalkPlacer.collectRequiredTemplates()));
-        } else if ("parks".equals(category) || "platforms".equals(category) || "other".equals(category) || "lootable".equals(category)) {
+        } else if ("desert".equals(category) || "parks".equals(category) || "platforms".equals(category) || "other".equals(category) || "lootable".equals(category)) {
             phases.add(new Phase(PhaseType.INSTALL,
                     () -> BuildingPlacer.placeBuilding(level, slot),
                     BuildingGenerator.collectRequiredBuildTemplates(List.of(slot))));
@@ -98,38 +100,20 @@ public class PhaseBuilder {
     }
 
     private void placeRoadForNode(RoadNode node, BlockPos pos) {
-        if (journal.hasRoadAt(pos.getX(), pos.getY(), pos.getZ())) {
-            if (RorcikStructuresModConfig.enableLogging) {
-                LOGGER.info("Info: [PHASE-BUILDER] Road already exists at {}, skipping", pos.toShortString());
-            }
-            return;
-        }
-
+        if (journal.hasRoadAt(pos.getX(), pos.getY(), pos.getZ())) return;
         List<Direction> connections = node.getAllConnections();
         if (connections.isEmpty()) return;
         RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
         if (entry == null) return;
 
-        RoadSegment segment = RoadPlacer.createAndPlaceRoad(
-                level, roadNetwork, entry.type(), pos, entry.rotation(),
-                createDeterministicRandom(pos), -1
-        );
-
+        RoadSegment segment = RoadPlacer.createAndPlaceRoad(level, roadNetwork, entry.type(), pos, entry.rotation(), createDeterministicRandom(pos), -1);
         if (segment != null) {
-            RoadDecorationsPlacer.placeDecorationsForSingleRoad(
-                    level, segment, createDeterministicRandom(pos)
-            );
+            RoadDecorationsPlacer.placeDecorationsForSingleRoad(level, segment, createDeterministicRandom(pos));
         }
     }
 
     private void placeStraightRoad(BlockPos pos) {
-        if (journal.hasRoadAt(pos.getX(), pos.getY(), pos.getZ())) {
-            if (RorcikStructuresModConfig.enableLogging) {
-                LOGGER.info("Info: [PHASE-BUILDER] Straight road already exists at {}, skipping", pos.toShortString());
-            }
-            return;
-        }
-
+        if (journal.hasRoadAt(pos.getX(), pos.getY(), pos.getZ())) return;
         Direction roadDir = detectRoadDirection(pos);
         if (roadDir == null) return;
         Rotation rotation = RoadPlacer.directionToRotation(roadDir);
@@ -139,20 +123,14 @@ public class PhaseBuilder {
         RoadConfig sConfig = RoadConfigLoader.getConfig("s");
         if (sConfig != null && !sConfig.stopVariants().isEmpty()) {
             synchronized (roadNetwork) {
-                if (roadNetwork.getAvailableStopVariants().isEmpty()) {
-                    roadNetwork.initStopVariants(sConfig.stopVariants());
-                }
+                if (roadNetwork.getAvailableStopVariants().isEmpty()) roadNetwork.initStopVariants(sConfig.stopVariants());
                 if (roadNetwork.getStraightRoadCount() >= 2) {
                     Integer stopVariant = roadNetwork.pollStopVariant();
                     if (stopVariant != null) forcedDecor = stopVariant;
                 }
             }
         }
-
-        RoadSegment segment = RoadPlacer.createAndPlaceRoad(
-                level, roadNetwork, roadTypeToPlace, pos, rotation, random, forcedDecor
-        );
-
+        RoadSegment segment = RoadPlacer.createAndPlaceRoad(level, roadNetwork, roadTypeToPlace, pos, rotation, random, forcedDecor);
         if (segment != null) {
             roadNetwork.incrementStraightRoadCount();
             RoadDecorationsPlacer.placeDecorationsForSingleRoad(level, segment, random);
@@ -162,9 +140,7 @@ public class PhaseBuilder {
     private Direction detectRoadDirection(BlockPos pos) {
         for (Direction dir : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
             BlockPos neighbor = pos.relative(dir, ru.rorcik.structures.generation.GeneratorConfig.ROAD_STEP);
-            if (straightPositions.contains(neighbor) || nodeMap.containsKey(neighbor)) {
-                return dir;
-            }
+            if (straightPositions.contains(neighbor) || nodeMap.containsKey(neighbor)) return dir;
         }
         return Direction.SOUTH;
     }
@@ -183,8 +159,7 @@ public class PhaseBuilder {
                 RoadConfig config = RoadConfigLoader.getConfig(entry.type());
                 if (config != null) {
                     for (int decor = 0; decor < Math.max(1, config.decorCount()); decor++) {
-                        ResourceLocation loc = ResourceLocation.tryParse(
-                                ru.rorcik.structures.common.ModPaths.roadNbtPath(config.type(), config.type() + "_" + decor));
+                        ResourceLocation loc = ResourceLocation.tryParse(ru.rorcik.structures.common.ModPaths.roadNbtPath(config.type(), config.type() + "_" + decor));
                         if (loc != null) templates.add(loc);
                     }
                 }
@@ -198,8 +173,7 @@ public class PhaseBuilder {
         RoadConfig config = RoadConfigLoader.getConfig("s");
         if (config != null) {
             for (int decor = 0; decor < Math.max(1, config.decorCount()); decor++) {
-                ResourceLocation loc = ResourceLocation.tryParse(
-                        ru.rorcik.structures.common.ModPaths.roadNbtPath("s", "s_" + decor));
+                ResourceLocation loc = ResourceLocation.tryParse(ru.rorcik.structures.common.ModPaths.roadNbtPath("s", "s_" + decor));
                 if (loc != null) templates.add(loc);
             }
         }

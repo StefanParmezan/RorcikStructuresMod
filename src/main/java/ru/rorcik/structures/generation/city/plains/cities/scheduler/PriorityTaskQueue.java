@@ -19,7 +19,6 @@ public class PriorityTaskQueue {
     }
 
     public boolean offer(AnchorChunkTask task) {
-        
         if (tasks.size() >= maxCapacity) {
             LOGGER.warn("Warn: [TASK-QUEUE] Queue exceeded capacity ({}/{}). Expanding dynamically to prevent task loss for: {}",
                     tasks.size(), maxCapacity, task);

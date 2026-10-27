@@ -5,6 +5,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkStatus;
+import net.minecraftforge.server.ServerLifecycleHooks;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.structures.common.RorcikStructuresModConfig;
@@ -28,7 +29,7 @@ public class CityBuildScheduler {
     private static final AtomicInteger totalTasksCompleted = new AtomicInteger(0);
     private static final Map<String, CityJournal> ACTIVE_JOURNALS = new ConcurrentHashMap<>();
 
-    private static final int MAX_CHUNK_RETRIES = 15; 
+    private static final int MAX_CHUNK_RETRIES = 15;
     private static final int MAX_EXECUTION_RETRIES = 3;
 
     public static synchronized void initialize() {
@@ -49,13 +50,9 @@ public class CityBuildScheduler {
                 try {
                     AnchorChunkTask task = taskQueue.poll();
                     if (task == null) {
-                        Thread.sleep(100);
                         continue;
                     }
                     processTask(task);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
                 } catch (Exception e) {
                     LOGGER.error("Error: [SCHEDULER] Dispatcher error", e);
                 }
@@ -69,7 +66,7 @@ public class CityBuildScheduler {
 
         CityJournal journal = ACTIVE_JOURNALS.get(city.cityId);
         if (journal == null) {
-            journal = CityJournal.load(city.centerX, city.centerZ, level);
+            journal = CityJournal.load(city.centerX, city.centerZ, city.typeId, level);
             ACTIVE_JOURNALS.put(city.cityId, journal);
         }
 
@@ -126,7 +123,7 @@ public class CityBuildScheduler {
         );
 
         List<AnchorChunkTask> allTasks = ChunkGrouper.groupIntoAnchorChunks(
-                pendingNodeMap, pendingStraightPositions, pendingSlots, phaseBuilder, city.centerX, city.centerZ);
+                pendingNodeMap, pendingStraightPositions, pendingSlots, phaseBuilder, city.centerX, city.centerZ, context.anchorChunkSize());
 
         List<AnchorChunkTask> tasks = new ArrayList<>();
         for (AnchorChunkTask task : allTasks) {
@@ -160,7 +157,7 @@ public class CityBuildScheduler {
     }
 
     private static void processTask(AnchorChunkTask task) {
-        net.minecraft.server.MinecraftServer server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
+        net.minecraft.server.MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) return;
         ServerLevel level = server.overworld();
         if (level == null) return;
@@ -196,21 +193,10 @@ public class CityBuildScheduler {
 
                 task.resetRetryCount();
                 taskQueue.offer(task);
-
-                try {
-                    Thread.sleep(2000); 
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
                 return;
             }
 
             taskQueue.offer(task);
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
             return;
         }
 
@@ -237,7 +223,6 @@ public class CityBuildScheduler {
             for (int dz = 0; dz < 4; dz++) {
                 int chunkX = anchorCX + dx;
                 int chunkZ = anchorCZ + dz;
-
                 ChunkAccess chunk = level.getChunk(chunkX, chunkZ, ChunkStatus.FULL, true);
                 if (chunk == null || !chunk.getStatus().isOrAfter(ChunkStatus.FULL)) {
                     return false;
@@ -259,7 +244,7 @@ public class CityBuildScheduler {
             for (Map.Entry<PhaseType, List<Runnable>> entry : phasedActions.entrySet()) {
                 for (Runnable action : entry.getValue()) {
                     action.run();
-                    task.incrementCompletedPhases(); 
+                    task.incrementCompletedPhases();
                 }
             }
 
@@ -302,7 +287,6 @@ public class CityBuildScheduler {
             checkCityCompletion(level, task);
 
         } catch (Exception e) {
-            
             int retries = task.incrementRetryCount();
             if (retries < MAX_EXECUTION_RETRIES) {
                 LOGGER.warn("Warn: [SCHEDULER] Task {} failed (attempt {}/{}). Re-queuing. Reason: {}",
@@ -378,12 +362,11 @@ public class CityBuildScheduler {
     }
 
     public static boolean resumeCityGeneration(PlayerProximityTracker.CityInfo city, ServerLevel level, int playerX, int playerZ) {
-        
         CityGenerationContext context = CityGenerationContextRegistry.get(city.worldId, city.centerX, city.centerZ);
         boolean contextRebuilt = false;
 
         if (context == null) {
-            context = ru.rorcik.structures.planning.CityZonePlanner.rebuildContext(level, city.centerX, city.centerZ);
+            context = ru.rorcik.structures.planning.CityZonePlanner.rebuildContext(level, city.centerX, city.centerZ, city.typeId);
             contextRebuilt = true;
         }
 
@@ -394,9 +377,9 @@ public class CityBuildScheduler {
 
         if (RorcikStructuresModConfig.enableLogging) {
             if (contextRebuilt) {
-                LOGGER.info("Info: [SCHEDULER] Resuming city '{}' — context REBUILT (from journal), restoring tasks", city.cityId);
+                LOGGER.info("Info: [SCHEDULER] Resuming city '{}' (type: {}) — context REBUILT, restoring tasks", city.cityId, city.typeId);
             } else {
-                LOGGER.info("Info: [SCHEDULER] Resuming city '{}' — context from registry, restoring tasks from journal", city.cityId);
+                LOGGER.info("Info: [SCHEDULER] Resuming city '{}' (type: {}) — context from registry, restoring tasks", city.cityId, city.typeId);
             }
         }
         return startCityGeneration(city, level, context, playerX, playerZ);

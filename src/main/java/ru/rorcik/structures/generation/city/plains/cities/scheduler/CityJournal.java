@@ -33,6 +33,7 @@ public class CityJournal {
     private final int centerX;
     private final int centerZ;
     private final String worldId;
+    private final String typeId;
     private final Path journalPath;
 
     private final Map<String, SlotData> slots = new ConcurrentHashMap<>();
@@ -153,7 +154,6 @@ public class CityJournal {
             if (entries != null) {
                 for (String entry : entries) {
                     try {
-                        
                         node.addEntryDirect(Direction.valueOf(entry));
                     } catch (IllegalArgumentException e) {
                         LOGGER.warn("Warn: [JOURNAL] Invalid direction in entries: {}", entry);
@@ -176,40 +176,6 @@ public class CityJournal {
             }
             return node;
         }
-    }
-
-    public boolean hasRoadAt(int x, int y, int z) {
-        for (RoadNodeData node : roadNodes.values()) {
-            if (node.positionX == x && node.positionY == y && node.positionZ == z
-                    && SlotStatus.COMPLETED.name().equals(node.status)) {
-                return true;
-            }
-        }
-        for (StraightRoadData road : straightRoads.values()) {
-            if (road.positionX == x && road.positionY == y && road.positionZ == z
-                    && SlotStatus.COMPLETED.name().equals(road.status)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public boolean isRoadNodeCompleted(int posX, int posY, int posZ) {
-        for (RoadNodeData node : roadNodes.values()) {
-            if (node.positionX == posX && node.positionY == posY && node.positionZ == posZ) {
-                return SlotStatus.COMPLETED.name().equals(node.status);
-            }
-        }
-        return false;
-    }
-
-    public boolean isStraightRoadCompleted(int posX, int posY, int posZ) {
-        for (StraightRoadData road : straightRoads.values()) {
-            if (road.positionX == posX && road.positionY == posY && road.positionZ == posZ) {
-                return SlotStatus.COMPLETED.name().equals(road.status);
-            }
-        }
-        return false;
     }
 
     public static class StraightRoadData {
@@ -283,6 +249,7 @@ public class CityJournal {
         public int centerX;
         public int centerZ;
         public String worldId;
+        public String typeId;
         public long seed;
         public int baseY;
         public int targetHeight;
@@ -293,10 +260,11 @@ public class CityJournal {
         public RoadNetworkData roadNetworkData;
     }
 
-    public CityJournal(int centerX, int centerZ, String worldId, Path journalPath) {
+    public CityJournal(int centerX, int centerZ, String worldId, String typeId, Path journalPath) {
         this.centerX = centerX;
         this.centerZ = centerZ;
         this.worldId = worldId;
+        this.typeId = typeId;
         this.journalPath = journalPath;
         this.cityStatus = CityStatus.PLANNING.name();
     }
@@ -310,16 +278,16 @@ public class CityJournal {
         return level.getServer().getWorldPath(LevelResource.ROOT).resolve(JOURNALS_SUBDIR);
     }
 
-    public static CityJournal load(int centerX, int centerZ, ServerLevel level) {
+    public static CityJournal load(int centerX, int centerZ, String typeId, ServerLevel level) {
         String worldId = getWorldId(level);
         Path journalsDir = getJournalsDir(level);
-        Path journalPath = journalsDir.resolve(String.format("city_%s_plains@%d_%d.json", worldId, centerX, centerZ));
+        Path journalPath = journalsDir.resolve(String.format("city_%s_%s@%d_%d.json", worldId, typeId, centerX, centerZ));
 
-        CityJournal journal = new CityJournal(centerX, centerZ, worldId, journalPath);
+        CityJournal journal = new CityJournal(centerX, centerZ, worldId, typeId, journalPath);
 
         if (!Files.exists(journalPath)) {
             if (RorcikStructuresModConfig.enableLogging) {
-                LOGGER.info("Info: [JOURNAL] No journal found for city [{}, {}] in world {}, creating new", centerX, centerZ, worldId);
+                LOGGER.info("Info: [JOURNAL] No journal found for {} city [{}, {}] in world {}, creating new", typeId, centerX, centerZ, worldId);
             }
             return journal;
         }
@@ -355,8 +323,8 @@ public class CityJournal {
                 long completedSlots = journal.slots.values().stream().filter(SlotData::isCompleted).count();
                 long pendingNodes = journal.roadNodes.values().stream().filter(RoadNodeData::isPending).count();
                 long pendingStraight = journal.straightRoads.values().stream().filter(StraightRoadData::isPending).count();
-                LOGGER.info("Info: [JOURNAL] Loaded journal for city [{}, {}] in world {}: {} slots ({} pending, {} completed), {} road nodes ({} pending), {} straight roads ({} pending), cityStatus={}",
-                        centerX, centerZ, worldId,
+                LOGGER.info("Info: [JOURNAL] Loaded journal for {} city [{}, {}] in world {}: {} slots ({} pending, {} completed), {} road nodes ({} pending), {} straight roads ({} pending), cityStatus={}",
+                        typeId, centerX, centerZ, worldId,
                         journal.slots.size(), pendingSlots, completedSlots,
                         journal.roadNodes.size(), pendingNodes,
                         journal.straightRoads.size(), pendingStraight,
@@ -367,6 +335,18 @@ public class CityJournal {
         }
 
         return journal;
+    }
+
+    public void initializeCity(long seed, int baseY, int targetHeight) {
+        this.seed = seed;
+        this.baseY = baseY;
+        this.targetHeight = targetHeight;
+        this.cityStatus = CityStatus.GENERATING.name();
+
+        this.slots.clear();
+        this.roadNodes.clear();
+        this.straightRoads.clear();
+        this.roadNetworkData = null;
     }
 
     public void rebuildFromContext(CityGenerationContext context) {
@@ -409,23 +389,6 @@ public class CityJournal {
         if (RorcikStructuresModConfig.enableLogging) {
             LOGGER.info("Info: [JOURNAL] Rebuilt journal from context for city [{}, {}]: {} slots, {} road nodes, {} straight roads, seed={}",
                     centerX, centerZ, slots.size(), roadNodes.size(), straightRoads.size(), this.seed);
-        }
-    }
-
-    public void initializeCity(long seed, int baseY, int targetHeight) {
-        this.seed = seed;
-        this.baseY = baseY;
-        this.targetHeight = targetHeight;
-        this.cityStatus = CityStatus.GENERATING.name();
-
-        this.slots.clear();
-        this.roadNodes.clear();
-        this.straightRoads.clear();
-        this.roadNetworkData = null;
-
-        if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Info: [JOURNAL] Initialized city [{}, {}] with seed={}, baseY={}, targetHeight={}",
-                    centerX, centerZ, seed, baseY, targetHeight);
         }
     }
 
@@ -497,6 +460,22 @@ public class CityJournal {
                     roadNetworkData.segments.size(), roadNetworkData.availableStopVariants.size(), roadNetworkData.straightRoadCount);
         }
         return network;
+    }
+
+    public boolean hasRoadAt(int x, int y, int z) {
+        for (RoadNodeData node : roadNodes.values()) {
+            if (node.positionX == x && node.positionY == y && node.positionZ == z
+                    && SlotStatus.COMPLETED.name().equals(node.status)) {
+                return true;
+            }
+        }
+        for (StraightRoadData road : straightRoads.values()) {
+            if (road.positionX == x && road.positionY == y && road.positionZ == z
+                    && SlotStatus.COMPLETED.name().equals(road.status)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void markSlotProcessing(int anchorChunkX, int anchorChunkZ, int posX, int posY, int posZ, String phase) {
@@ -631,6 +610,7 @@ public class CityJournal {
             data.centerX = centerX;
             data.centerZ = centerZ;
             data.worldId = worldId;
+            data.typeId = typeId;
             data.seed = seed;
             data.baseY = baseY;
             data.targetHeight = targetHeight;
@@ -659,8 +639,8 @@ public class CityJournal {
             if (RorcikStructuresModConfig.enableLogging) {
                 long pendingSlots = slotsSnapshot.stream().filter(SlotData::isPending).count();
                 long completedSlots = slotsSnapshot.stream().filter(SlotData::isCompleted).count();
-                LOGGER.info("Info: [JOURNAL] Saved journal for city [{}, {}] in world {}: {} slots ({} pending, {} completed), {} road nodes, {} straight roads",
-                        centerX, centerZ, worldId, slotsSnapshot.size(), pendingSlots, completedSlots, nodesSnapshot.size(), straightSnapshot.size());
+                LOGGER.info("Info: [JOURNAL] Saved journal for {} city [{}, {}] in world {}: {} slots ({} pending, {} completed), {} road nodes, {} straight roads",
+                        typeId, centerX, centerZ, worldId, slotsSnapshot.size(), pendingSlots, completedSlots, nodesSnapshot.size(), straightSnapshot.size());
             }
         } catch (IOException e) {
             LOGGER.error("Error: [JOURNAL] Failed to save journal for city [{}, {}] in world {}", centerX, centerZ, worldId, e);
@@ -672,7 +652,7 @@ public class CityJournal {
             if (Files.exists(journalPath)) {
                 Files.delete(journalPath);
                 if (RorcikStructuresModConfig.enableLogging) {
-                    LOGGER.info("Success: [JOURNAL] Deleted journal for city [{}, {}] in world {} (100% complete)", centerX, centerZ, worldId);
+                    LOGGER.info("Success: [JOURNAL] Deleted journal for {} city [{}, {}] in world {} (100% complete)", typeId, centerX, centerZ, worldId);
                 }
             }
         } catch (IOException e) {
@@ -683,6 +663,7 @@ public class CityJournal {
     public int getCenterX() { return centerX; }
     public int getCenterZ() { return centerZ; }
     public String getWorldId() { return worldId; }
+    public String getTypeId() { return typeId; }
     public long getSeed() { return seed; }
     public int getBaseY() { return baseY; }
     public int getTargetHeight() { return targetHeight; }
