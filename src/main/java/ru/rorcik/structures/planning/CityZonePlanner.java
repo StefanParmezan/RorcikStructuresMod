@@ -34,6 +34,7 @@ import java.util.*;
 
 public class CityZonePlanner {
     private static final Logger LOGGER = LogUtils.getLogger();
+    public static final int CITY_CHUNK_BORDER = 1;
     private static final String[] DESERT_BUILDINGS = {
             "aa", "ab", "ac", "ad", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "z"
     };
@@ -77,7 +78,7 @@ public class CityZonePlanner {
             int anchorChunkSize = isDesert ? 2 : 4;
             DryRunResult dryRun = isDesert ? performDesertDryRun(level, centerX, centerZ, type.targetHeight) : performDryRun(level, centerX, centerZ, type.targetHeight);
 
-            Set<Long> affectedChunks = calculateExactChunks(dryRun, anchorChunkSize, isDesert);
+            Set<Long> affectedChunks = calculateExactChunks(dryRun, anchorChunkSize);
 
             CityJournal journal = CityJournal.load(centerX, centerZ, type.id, level);
             journal.initializeCity(dryRun.seed, dryRun.baseY, type.targetHeight);
@@ -210,7 +211,7 @@ public class CityZonePlanner {
 
     private record DryRunResult(long seed, Map<BlockPos, RoadNode> nodeMap, Set<BlockPos> straightPositions, List<BuildingSlot> slots, RoadNetwork roadNetwork, int baseY) {}
 
-    private static Set<Long> calculateExactChunks(DryRunResult dryRun, int anchorChunkSize, boolean isDesert) {
+    private static Set<Long> calculateExactChunks(DryRunResult dryRun, int anchorChunkSize) {
         Set<Long> chunks = new HashSet<>();
 
         for (Map.Entry<BlockPos, RoadNode> entry : dryRun.nodeMap.entrySet()) {
@@ -245,21 +246,23 @@ public class CityZonePlanner {
             }
         }
 
-        if (isDesert) {
-            Set<Long> bufferedChunks = new HashSet<>();
-            for (long chunkKey : chunks) {
-                int cx = (int)(chunkKey >> 32);
-                int cz = (int)(chunkKey & 0xFFFFFFFFL);
-                for (int dx = -1; dx <= 1; dx++) {
-                    for (int dz = -1; dz <= 1; dz++) {
-                        bufferedChunks.add(((long)(cx + dx) << 32) | ((cz + dz) & 0xFFFFFFFFL));
-                    }
+        return expandCityChunks(chunks);
+    }
+
+    public static Set<Long> expandCityChunks(Set<Long> chunks) {
+        if (chunks.isEmpty()) return chunks;
+
+        Set<Long> expanded = new HashSet<>();
+        for (long chunkKey : chunks) {
+            int chunkX = (int) (chunkKey >> 32);
+            int chunkZ = (int) (chunkKey & 0xFFFFFFFFL);
+            for (int dx = -CITY_CHUNK_BORDER; dx <= CITY_CHUNK_BORDER; dx++) {
+                for (int dz = -CITY_CHUNK_BORDER; dz <= CITY_CHUNK_BORDER; dz++) {
+                    expanded.add(((long) (chunkX + dx) << 32) | ((chunkZ + dz) & 0xFFFFFFFFL));
                 }
             }
-            return bufferedChunks;
         }
-
-        return chunks;
+        return expanded;
     }
 
     private static void addStructureChunks(Set<Long> chunks, BlockPos pos, int size) {

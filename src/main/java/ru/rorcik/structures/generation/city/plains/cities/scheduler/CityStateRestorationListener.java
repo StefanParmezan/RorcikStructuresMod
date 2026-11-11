@@ -75,7 +75,7 @@ public class CityStateRestorationListener {
                 addStructureChunks(chunks, slot.position(), context.anchorChunkSize()); 
             }
         }
-        return chunks;
+        return CityZonePlanner.expandCityChunks(chunks);
     }
 
     private static void addStructureChunks(Set<Long> chunks, net.minecraft.core.BlockPos pos, int size) {
