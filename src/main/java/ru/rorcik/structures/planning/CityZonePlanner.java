@@ -212,20 +212,28 @@ public class CityZonePlanner {
     private record DryRunResult(long seed, Map<BlockPos, RoadNode> nodeMap, Set<BlockPos> straightPositions, List<BuildingSlot> slots, RoadNetwork roadNetwork, int baseY) {}
 
     private static Set<Long> calculateExactChunks(DryRunResult dryRun, int anchorChunkSize) {
+        return calculateCityChunks(dryRun.nodeMap, dryRun.straightPositions, dryRun.slots, anchorChunkSize, CITY_CHUNK_BORDER);
+    }
+
+    public static Set<Long> calculateCityChunks(Map<BlockPos, RoadNode> nodeMap,
+                                                Set<BlockPos> straightPositions,
+                                                List<BuildingSlot> slots,
+                                                int anchorChunkSize,
+                                                int border) {
         Set<Long> chunks = new HashSet<>();
 
-        for (Map.Entry<BlockPos, RoadNode> entry : dryRun.nodeMap.entrySet()) {
+        for (Map.Entry<BlockPos, RoadNode> entry : nodeMap.entrySet()) {
             List<Direction> connections = entry.getValue().getAllConnections();
             RoadConfigLoader.RoadMapEntry roadEntry = RoadConfigLoader.findRoadForConnections(connections);
             if (roadEntry != null && "st".equals(roadEntry.type())) continue;
             addStructureChunks(chunks, entry.getKey(), 4);
         }
 
-        for (BlockPos pos : dryRun.straightPositions) {
+        for (BlockPos pos : straightPositions) {
             addStructureChunks(chunks, pos, 4);
         }
 
-        for (BuildingSlot slot : dryRun.slots) {
+        for (BuildingSlot slot : slots) {
             if (slot.category().equals("platforms")) {
                 continue;
             }
@@ -246,18 +254,22 @@ public class CityZonePlanner {
             }
         }
 
-        return expandCityChunks(chunks);
+        return expandCityChunks(chunks, border);
     }
 
     public static Set<Long> expandCityChunks(Set<Long> chunks) {
-        if (chunks.isEmpty()) return chunks;
+        return expandCityChunks(chunks, CITY_CHUNK_BORDER);
+    }
+
+    public static Set<Long> expandCityChunks(Set<Long> chunks, int border) {
+        if (chunks.isEmpty() || border <= 0) return chunks;
 
         Set<Long> expanded = new HashSet<>();
         for (long chunkKey : chunks) {
             int chunkX = (int) (chunkKey >> 32);
             int chunkZ = (int) (chunkKey & 0xFFFFFFFFL);
-            for (int dx = -CITY_CHUNK_BORDER; dx <= CITY_CHUNK_BORDER; dx++) {
-                for (int dz = -CITY_CHUNK_BORDER; dz <= CITY_CHUNK_BORDER; dz++) {
+            for (int dx = -border; dx <= border; dx++) {
+                for (int dz = -border; dz <= border; dz++) {
                     expanded.add(((long) (chunkX + dx) << 32) | ((chunkZ + dz) & 0xFFFFFFFFL));
                 }
             }

@@ -14,6 +14,8 @@ import ru.rorcik.structures.data.city.plains.containers.BuildingSlot;
 import ru.rorcik.structures.data.city.plains.containers.RoadNetwork;
 import ru.rorcik.structures.data.city.plains.containers.RoadNode;
 import ru.rorcik.structures.generation.GeneratorConfig;
+import ru.rorcik.structures.generation.city.plains.cities.buildings.SidewalkPlacer;
+import ru.rorcik.structures.planning.CityZonePlanner;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -28,6 +30,7 @@ public class CityBuildScheduler {
     private static final AtomicInteger totalTasksSubmitted = new AtomicInteger(0);
     private static final AtomicInteger totalTasksCompleted = new AtomicInteger(0);
     private static final Map<String, CityJournal> ACTIVE_JOURNALS = new ConcurrentHashMap<>();
+    private static final Map<String, Set<Long>> CITY_CHUNKS = new ConcurrentHashMap<>();
 
     private static final int MAX_CHUNK_RETRIES = 15;
     private static final int MAX_EXECUTION_RETRIES = 3;
@@ -64,10 +67,15 @@ public class CityBuildScheduler {
                                               CityGenerationContext context, int playerX, int playerZ) {
         if (!active.get()) initialize();
 
-        CityJournal journal = ACTIVE_JOURNALS.get(city.cityId);
+        CityJournal journal = ACTIVE_JOURNALS.get("city@" + city.centerX + "," + city.centerZ);
         if (journal == null) {
             journal = CityJournal.load(city.centerX, city.centerZ, city.typeId, level);
-            ACTIVE_JOURNALS.put(city.cityId, journal);
+            ACTIVE_JOURNALS.put("city@" + city.centerX + "," + city.centerZ, journal);
+        }
+
+        if (journal.completionRatio() >= 1.0) {
+            finalizeCity(level, journal, city.centerX, city.centerZ);
+            return true;
         }
 
         if (journal.getSeed() == 0) {
@@ -117,9 +125,22 @@ public class CityBuildScheduler {
         int baseY = journal.getBaseY();
         RandomSource random = RandomSource.create(journal.getSeed());
 
+        List<BuildingSlot> allSlots = new ArrayList<>();
+        for (CityJournal.SlotData slotData : journal.getAllSlots()) {
+            allSlots.add(slotData.toBuildingSlot());
+        }
+
+        int anchorChunkSize = context != null
+                ? context.anchorChunkSize()
+                : ("desert".equals(city.typeId) ? 2 : 4);
+        Set<Long> cityChunks = CityZonePlanner.calculateCityChunks(
+                allNodeMap, allStraightPositions, allSlots, anchorChunkSize, CityZonePlanner.CITY_CHUNK_BORDER
+        );
+        CITY_CHUNKS.put("city@" + city.centerX + "," + city.centerZ, cityChunks);
+
         PhaseBuilder phaseBuilder = new PhaseBuilder(
                 level, roadNetwork, random, pendingSlots, baseY,
-                allNodeMap, allStraightPositions, city.centerX, city.centerZ, journal
+                allNodeMap, allStraightPositions, city.centerX, city.centerZ, journal, cityChunks
         );
 
         List<AnchorChunkTask> allTasks = ChunkGrouper.groupIntoAnchorChunks(
@@ -279,6 +300,8 @@ public class CityBuildScheduler {
                 }
             }
 
+            repairSidewalksForTask(level, task);
+
             if (RorcikStructuresModConfig.enableLogging) {
                 LOGGER.info("Success: [SCHEDULER] Completed task {} (Phases: {}/{})",
                         task, task.completedPhases(), task.totalPhases());
@@ -334,26 +357,73 @@ public class CityBuildScheduler {
         double ratio = journal.completionRatio();
 
         if (ratio >= 1.0) {
-            journal.markCityCompleted();
-            journal.delete();
-            ACTIVE_JOURNALS.remove(task.cityId());
-
-            CityGenerationSavedData.get(level).markComplete(task.centerX(), task.centerZ());
-
-            if (RorcikStructuresModConfig.enableLogging) {
-                LOGGER.info("Success: [SCHEDULER] City generation at [{}, {}] is 100% complete, journal deleted",
-                        task.centerX(), task.centerZ());
-            }
+            finalizeCity(level, journal, task.centerX(), task.centerZ());
         } else if (ratio >= 0.9 && RorcikStructuresModConfig.enableLogging) {
             LOGGER.info("Info: [SCHEDULER] City at [{}, {}] is {}% complete, continuing generation",
                     task.centerX(), task.centerZ(), (int)(ratio * 100));
         }
     }
 
+    private static void finalizeCity(ServerLevel level, CityJournal journal, int centerX, int centerZ) {
+        journal.markCityCompleted();
+        journal.delete();
+        ACTIVE_JOURNALS.remove("city@" + centerX + "," + centerZ);
+        CITY_CHUNKS.remove("city@" + centerX + "," + centerZ);
+
+        CityGenerationSavedData.get(level).markComplete(centerX, centerZ);
+
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("Success: [SCHEDULER] City generation at [{}, {}] is 100% complete, journal deleted",
+                    centerX, centerZ);
+        }
+    }
+
+    private static void repairSidewalksForTask(ServerLevel level, AnchorChunkTask task) {
+        boolean hasHousePhase = false;
+        for (SlotWork slotWork : task.slotWorks()) {
+            for (Phase phase : slotWork.phases()) {
+                if (phase.type() == PhaseType.HOUSE_SHELL) {
+                    hasHousePhase = true;
+                    break;
+                }
+            }
+            if (hasHousePhase) break;
+        }
+        if (!hasHousePhase) return;
+
+        CityJournal journal = ACTIVE_JOURNALS.get(task.cityId());
+        if (journal == null) return;
+
+        Set<Long> cityChunks = CITY_CHUNKS.get(task.cityId());
+        if (cityChunks == null) return;
+
+        int minX = task.anchorBlockX();
+        int maxX = minX + 63;
+        int minZ = task.anchorBlockZ();
+        int maxZ = minZ + 63;
+        int margin = 96;
+
+        for (CityJournal.SlotData slotData : journal.getAllSlots()) {
+            if (!"houses".equals(slotData.category) || !slotData.isCompleted() || !slotData.isHousePlaced()) continue;
+            if (slotData.positionX < minX - margin || slotData.positionX > maxX + margin) continue;
+            if (slotData.positionZ < minZ - margin || slotData.positionZ > maxZ + margin) continue;
+
+            BuildingSlot slot = slotData.toBuildingSlot();
+            try {
+                long seed = level.getSeed() ^ slot.position().hashCode();
+                SidewalkPlacer.placeSidewalkForSlot(level, slot, RandomSource.create(seed), cityChunks);
+            } catch (Exception e) {
+                LOGGER.error("Error: [SCHEDULER] Failed to repair sidewalk for slot {}: {}",
+                        slot.position().toShortString(), e.getMessage(), e);
+            }
+        }
+    }
+
     public static boolean pauseCityGeneration(PlayerProximityTracker.CityInfo city, ServerLevel level) {
         if (taskQueue == null) return false;
         int removed = taskQueue.removeTasksForCity(city.centerX, city.centerZ);
-        ACTIVE_JOURNALS.remove(city.cityId);
+        ACTIVE_JOURNALS.remove("city@" + city.centerX + "," + city.centerZ);
+        CITY_CHUNKS.remove("city@" + city.centerX + "," + city.centerZ);
         if (RorcikStructuresModConfig.enableLogging) {
             LOGGER.info("Info: [SCHEDULER] Paused city '{}' — removed {} pending tasks from queue. Progress saved in journal.",
                     city.cityId, removed);
@@ -396,6 +466,7 @@ public class CityBuildScheduler {
             taskQueue = null;
         }
         ACTIVE_JOURNALS.clear();
+        CITY_CHUNKS.clear();
     }
 
     public static void reset() {

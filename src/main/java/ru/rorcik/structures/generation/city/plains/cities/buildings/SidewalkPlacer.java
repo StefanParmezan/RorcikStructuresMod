@@ -26,6 +26,10 @@ public class SidewalkPlacer {
     private static final String PLATFORM_CATEGORY = "platforms";
 
     public static void placeSidewalkForSlot(ServerLevel level, BuildingSlot slot, RandomSource random) {
+        placeSidewalkForSlot(level, slot, random, null);
+    }
+
+    public static void placeSidewalkForSlot(ServerLevel level, BuildingSlot slot, RandomSource random, Set<Long> cityChunks) {
         if (slot.category().equals(PARKS_CATEGORY) || slot.category().equals(PLATFORM_CATEGORY)) {
             return;
         }
@@ -40,10 +44,11 @@ public class SidewalkPlacer {
             return;
         }
 
-        placeSidewalk(level, slot, random);
+        placeSidewalk(level, slot, random, cityChunks);
     }
 
-    private static void placeSidewalk(ServerLevel level, BuildingSlot slot, RandomSource random) {
+    private static void placeSidewalk(ServerLevel level, BuildingSlot slot, RandomSource random,
+                                      Set<Long> cityChunks) {
         String sidewalkName = SIDEWALK_NAMES[random.nextInt(SIDEWALK_NAMES.length)];
         String nbtPath = ModPaths.sidewalkNbtPath(sidewalkName);
         ResourceLocation location = ResourceLocation.tryParse(nbtPath);
@@ -82,6 +87,13 @@ public class SidewalkPlacer {
                 sidewalkPos, sidewalkRotation, size.getX(), size.getZ()
         );
 
+        if (cityChunks != null && !isInsideCity(cityChunks, compensated, sidewalkRotation, size)) {
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.debug("Debug: [SIDEWALK] Skipping sidewalk outside city at {}", compensated.toShortString());
+            }
+            return;
+        }
+
         StructureUtils.placeStructure(level, compensated, nbtPath, sidewalkRotation, false, false);
 
         if (RorcikStructuresModConfig.enableLogging) {
@@ -115,6 +127,25 @@ public class SidewalkPlacer {
             case EAST, WEST   -> Rotation.CLOCKWISE_90;
             default           -> Rotation.NONE;
         };
+    }
+
+    private static boolean isInsideCity(Set<Long> cityChunks, BlockPos origin, Rotation rotation, BlockPos size) {
+        boolean rotated = rotation == Rotation.CLOCKWISE_90 || rotation == Rotation.COUNTERCLOCKWISE_90;
+        int width = rotated ? size.getZ() : size.getX();
+        int depth = rotated ? size.getX() : size.getZ();
+
+        int minChunkX = origin.getX() >> 4;
+        int maxChunkX = (origin.getX() + width - 1) >> 4;
+        int minChunkZ = origin.getZ() >> 4;
+        int maxChunkZ = (origin.getZ() + depth - 1) >> 4;
+
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                long key = ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
+                if (!cityChunks.contains(key)) return false;
+            }
+        }
+        return true;
     }
 
     public static Set<ResourceLocation> collectRequiredTemplates() {

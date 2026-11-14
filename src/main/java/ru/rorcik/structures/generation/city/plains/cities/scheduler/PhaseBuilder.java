@@ -17,6 +17,7 @@ import ru.rorcik.structures.generation.city.plains.cities.buildings.SidewalkPlac
 import ru.rorcik.structures.generation.city.plains.cities.roads.RoadDecorationsPlacer;
 import ru.rorcik.structures.generation.city.plains.cities.roads.RoadPlacer;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class PhaseBuilder {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -31,12 +32,13 @@ public class PhaseBuilder {
     private final int cityCenterX;
     private final int cityCenterZ;
     private final CityJournal journal;
+    private final Set<Long> cityChunks;
 
     public PhaseBuilder(ServerLevel level, RoadNetwork roadNetwork, RandomSource baseRandom,
                         List<BuildingSlot> slots, int baseY,
                         Map<BlockPos, RoadNode> nodeMap, Set<BlockPos> straightPositions,
                         int cityCenterX, int cityCenterZ,
-                        CityJournal journal) {
+                        CityJournal journal, Set<Long> cityChunks) {
         this.level = level;
         this.roadNetwork = roadNetwork;
         this.baseRandom = baseRandom;
@@ -48,6 +50,7 @@ public class PhaseBuilder {
         this.cityCenterX = cityCenterX;
         this.cityCenterZ = cityCenterZ;
         this.journal = journal;
+        this.cityChunks = cityChunks;
     }
 
     public SlotWork buildForRoadNode(RoadNode node, BlockPos pos, int anchorChunkSize) {
@@ -81,15 +84,28 @@ public class PhaseBuilder {
         String category = slot.category();
 
         if ("houses".equals(category)) {
+            AtomicBoolean housePlaced = new AtomicBoolean(false);
             phases.add(new Phase(PhaseType.HOUSE_SHELL,
-                    () -> BuildingPlacer.placeBuildingShell(level, slot),
+                    () -> {
+                        boolean placed = BuildingPlacer.placeBuildingShell(level, slot);
+                        housePlaced.set(placed);
+                        journal.markHousePlaced(anchorChunkX, anchorChunkZ, pos.getX(), pos.getY(), pos.getZ(), placed);
+                    },
                     BuildingGenerator.collectRequiredBuildTemplates(List.of(slot))));
             phases.add(new Phase(PhaseType.INSTALL, () -> {}, Collections.emptySet()));
             phases.add(new Phase(PhaseType.ROOMS,
-                    () -> BuildingPlacer.placeHouseRoomsOnly(level, slot, createDeterministicRandom(slot.position())),
+                    () -> {
+                        if (housePlaced.get()) {
+                            BuildingPlacer.placeHouseRoomsOnly(level, slot, createDeterministicRandom(slot.position()));
+                        }
+                    },
                     BuildingGenerator.collectRequiredRoomTemplates(List.of(slot))));
             phases.add(new Phase(PhaseType.SIDEWALKS,
-                    () -> SidewalkPlacer.placeSidewalkForSlot(level, slot, createDeterministicRandom(slot.position())),
+                    () -> {
+                        if (housePlaced.get()) {
+                            SidewalkPlacer.placeSidewalkForSlot(level, slot, createDeterministicRandom(slot.position()), cityChunks);
+                        }
+                    },
                     SidewalkPlacer.collectRequiredTemplates()));
         } else if ("desert".equals(category) || "parks".equals(category) || "platforms".equals(category) || "other".equals(category) || "lootable".equals(category)) {
             phases.add(new Phase(PhaseType.INSTALL,

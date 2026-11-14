@@ -62,6 +62,7 @@ public class CityJournal {
         public int maxDepth;
         public String currentPhase;
         public String status;
+        public boolean housePlaced;
 
         public SlotData() {}
 
@@ -90,6 +91,10 @@ public class CityJournal {
 
         public boolean isCompleted() {
             return SlotStatus.COMPLETED.name().equals(status);
+        }
+
+        public boolean isHousePlaced() {
+            return housePlaced;
         }
 
         public BuildingSlot toBuildingSlot() {
@@ -504,6 +509,15 @@ public class CityJournal {
         }
     }
 
+    public void markHousePlaced(int anchorChunkX, int anchorChunkZ, int posX, int posY, int posZ, boolean placed) {
+        String key = anchorChunkX + "," + anchorChunkZ + ":" + posX + "," + posY + "," + posZ;
+        SlotData slot = slots.get(key);
+        if (slot != null && slot.housePlaced != placed) {
+            slot.housePlaced = placed;
+            CityJournalWriter.scheduleWrite(this);
+        }
+    }
+
     public void markSlotFailed(int anchorChunkX, int anchorChunkZ, int posX, int posY, int posZ) {
         String key = anchorChunkX + "," + anchorChunkZ + ":" + posX + "," + posY + "," + posZ;
         SlotData slot = slots.get(key);
@@ -556,6 +570,10 @@ public class CityJournal {
         return slots.values().stream()
                 .filter(SlotData::isPending)
                 .collect(Collectors.toList());
+    }
+
+    public List<SlotData> getAllSlots() {
+        return new ArrayList<>(slots.values());
     }
 
     public List<RoadNodeData> getPendingRoadNodes() {
