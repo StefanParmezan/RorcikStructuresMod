@@ -71,4 +71,23 @@ class RandomCityZoneProviderTest {
         assertNotNull(candidates);
         assertTrue(candidates.stream().allMatch(candidate -> candidate.type() == CityType.PLAINS));
     }
+
+    @Test
+    void resolvedCandidatesRespectMinimumDistances() {
+        RandomCityZoneProvider provider = new RandomCityZoneProvider(42L, 63);
+        List<CityCandidate> candidates = provider.candidatesNear(0, 0, 30000);
+
+        for (int i = 0; i < candidates.size(); i++) {
+            for (int j = i + 1; j < candidates.size(); j++) {
+                CityCandidate first = candidates.get(i);
+                CityCandidate second = candidates.get(j);
+                int required = Math.max(first.minDistance(), second.minDistance());
+                long dx = (long) first.centerX() - second.centerX();
+                long dz = (long) first.centerZ() - second.centerZ();
+
+                assertTrue(dx * dx + dz * dz >= (long) required * required,
+                        "Cities too close: " + first + " and " + second);
+            }
+        }
+    }
 }
