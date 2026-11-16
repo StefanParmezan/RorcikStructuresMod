@@ -40,8 +40,9 @@ public final class CityLayoutPlanner {
                 parkAvailability, nodeMap, straightPositions, new HashSet<>(), random
         );
 
+        int zoneTargetHeight = targetHeight(CityType.PLAINS, seaLevel);
         return buildPlan(citySeed, centerX, centerZ, CityType.PLAINS, baseY, 4,
-                nodeMap, straightPositions, slots);
+                nodeMap, straightPositions, slots, zoneTargetHeight);
     }
 
     public static CityLayoutPlan planDesert(long worldSeed, int centerX, int centerZ, int seaLevel) {
@@ -77,14 +78,15 @@ public final class CityLayoutPlanner {
         }
 
         return buildPlan(citySeed, centerX, centerZ, CityType.DESERT, baseY, 2,
-                new HashMap<>(), new HashSet<>(), slots);
+                new HashMap<>(), new HashSet<>(), slots, baseY + yOffset);
     }
 
     private static CityLayoutPlan buildPlan(long citySeed, int centerX, int centerZ, CityType type,
                                             int baseY, int anchorChunkSize,
                                             Map<BlockPos, RoadNode> nodeMap,
                                             Set<BlockPos> straightPositions,
-                                            List<BuildingSlot> slots) {
+                                            List<BuildingSlot> slots,
+                                            int zoneTargetHeight) {
         Set<Long> chunks = CityZonePlanner.calculateCityChunks(
                 nodeMap, straightPositions, slots, anchorChunkSize, 0
         );
@@ -107,7 +109,7 @@ public final class CityLayoutPlanner {
         }
 
         CityZone zone = new CityZone(centerX, centerZ, type.toZoneRules(),
-                targetHeight(type, baseY), minChunkX, minChunkZ, maxChunkX, maxChunkZ);
+                zoneTargetHeight, minChunkX, minChunkZ, maxChunkX, maxChunkZ);
 
         return new CityLayoutPlan(citySeed, centerX, centerZ, type, baseY, anchorChunkSize,
                 nodeMap, straightPositions, slots, chunks, zoneChunks, zone);

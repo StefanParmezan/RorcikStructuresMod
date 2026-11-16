@@ -62,7 +62,7 @@ class CityLayoutPlannerTest {
         CityLayoutPlan plan = CityLayoutPlanner.planDesert(7L, 0, 0, 63);
 
         assertEquals(CityType.DESERT, plan.type());
-        assertEquals(63, plan.zone().targetHeight());
+        assertEquals(62, plan.zone().targetHeight());
         assertFalse(plan.chunks().isEmpty());
     }
 }
