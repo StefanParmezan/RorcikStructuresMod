@@ -55,24 +55,30 @@ public class CityZoneProviderListener {
 
     private static void logNearestCandidate(ServerLevel level, RandomCityZoneProvider provider) {
         BlockPos spawn = level.getSharedSpawnPos();
-        List<CityCandidate> candidates = provider.candidatesNear(spawn.getX(), spawn.getZ(), 12000);
+        List<CityCandidate> candidates = provider.candidatesNear(spawn.getX(), spawn.getZ(), 30000);
 
-        CityCandidate nearest = null;
-        long bestDistance = Long.MAX_VALUE;
-        for (CityCandidate candidate : candidates) {
-            if (!provider.isCandidateValid(candidate)) continue;
+        candidates.sort(java.util.Comparator.comparingLong(candidate -> {
             long dx = (long) candidate.centerX() - spawn.getX();
             long dz = (long) candidate.centerZ() - spawn.getZ();
-            long distance = dx * dx + dz * dz;
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                nearest = candidate;
-            }
+            return dx * dx + dz * dz;
+        }));
+
+        if (candidates.isEmpty()) {
+            LOGGER.info("Info: [CITY-ZONE] No random city candidates within 30000 blocks of spawn");
+            return;
         }
 
-        if (nearest != null) {
-            LOGGER.info("Info: [CITY-ZONE] Nearest random city candidate to spawn: [{}, {}] type={}",
-                    nearest.centerX(), nearest.centerZ(), nearest.type().id);
+        CityCandidate nearestRaw = candidates.get(0);
+        LOGGER.info("Info: [CITY-ZONE] Nearest random city candidate to spawn: [{}, {}] type={}",
+                nearestRaw.centerX(), nearestRaw.centerZ(), nearestRaw.type().id);
+
+        for (CityCandidate candidate : candidates) {
+            if (!provider.isCandidateValid(candidate)) continue;
+            LOGGER.info("Info: [CITY-ZONE] Nearest valid random city candidate to spawn: [{}, {}] type={}",
+                    candidate.centerX(), candidate.centerZ(), candidate.type().id);
+            return;
         }
+
+        LOGGER.info("Info: [CITY-ZONE] No valid random city candidate within 30000 blocks of spawn");
     }
 }

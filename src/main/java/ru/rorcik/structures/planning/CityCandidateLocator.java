@@ -109,7 +109,7 @@ public final class CityCandidateLocator {
     }
 
     private static int cellSize(CityType type) {
-        return type.minDistance * 2;
+        return type.minDistance;
     }
 
     private static int maxMinDistance() {
