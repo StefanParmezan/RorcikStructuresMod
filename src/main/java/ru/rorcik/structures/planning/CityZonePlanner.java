@@ -35,7 +35,7 @@ import java.util.*;
 public class CityZonePlanner {
     private static final Logger LOGGER = LogUtils.getLogger();
     public static final int CITY_CHUNK_BORDER = 1;
-    private static final String[] DESERT_BUILDINGS = {
+    static final String[] DESERT_BUILDINGS = {
             "aa", "ab", "ac", "ad", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "z"
     };
 
