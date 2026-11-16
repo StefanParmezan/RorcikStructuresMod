@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BiomeTags;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeSource;
+import ru.rorcik.core.zone.TemperatureZone;
 
 @FunctionalInterface
 public interface CityCandidateValidator {
@@ -31,7 +32,10 @@ public interface CityCandidateValidator {
                     .map(key -> key.location())
                     .orElse(null);
             if (biomeId == null) return false;
-            return CityZonePlanner.isAllowedByRwg(biomeId);
+            if (!CityZonePlanner.isAllowedByRwg(biomeId)) return false;
+
+            TemperatureZone zone = CityZonePlanner.getBiomeTemperatureZone(biomeId, biome.value());
+            return zone != null && candidate.type().allowedZones.contains(zone);
         };
     }
 }
