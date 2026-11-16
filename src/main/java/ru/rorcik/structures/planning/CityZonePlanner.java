@@ -55,14 +55,7 @@ public class CityZonePlanner {
             }
 
             if (!"desert".equals(type.id)) {
-                if (ModList.get().isLoaded("rwg")) {
-                    try {
-                        Class<?> rwgConfigClass = Class.forName("ru.rorcik.rwg.RwgConfig");
-                        java.lang.reflect.Method isAllowedMethod = rwgConfigClass.getMethod("isAllowedSpawnBiome", ResourceLocation.class);
-                        Boolean isAllowed = (Boolean) isAllowedMethod.invoke(null, biomeId);
-                        if (Boolean.FALSE.equals(isAllowed)) { return false; }
-                    } catch (Exception e) {  }
-                }
+                if (!isAllowedByRwg(biomeId)) { return false; }
                 TemperatureZone currentZone = getBiomeTemperatureZone(biomeId, biomeHolder.value());
                 if (currentZone == null || !type.allowedZones.contains(currentZone)) {
                     LOGGER.warn("Warn: [CITY-PLANNER] Biome not suitable for type {}", type.id);
@@ -287,7 +280,7 @@ public class CityZonePlanner {
         }
     }
 
-    private static TemperatureZone getBiomeTemperatureZone(ResourceLocation biomeId, Biome biome) {
+    public static TemperatureZone getBiomeTemperatureZone(ResourceLocation biomeId, Biome biome) {
         Optional<TemperatureZone> coreZone = BiomeZoneRegistry.getZone(biomeId);
         if (coreZone.isPresent()) return coreZone.get();
         float temp = biome.getBaseTemperature();
@@ -296,5 +289,18 @@ public class CityZonePlanner {
         if (temp < 0.75f) return TemperatureZone.NEUTRAL;
         if (temp < 0.95f) return TemperatureZone.WARM;
         return TemperatureZone.HOT;
+    }
+
+    public static boolean isAllowedByRwg(ResourceLocation biomeId) {
+        if (!ModList.get().isLoaded("rwg")) return true;
+        try {
+            Class<?> rwgConfigClass = Class.forName("ru.rorcik.rwg.RwgConfig");
+            java.lang.reflect.Method isAllowedMethod =
+                    rwgConfigClass.getMethod("isAllowedSpawnBiome", ResourceLocation.class);
+            Boolean isAllowed = (Boolean) isAllowedMethod.invoke(null, biomeId);
+            return !Boolean.FALSE.equals(isAllowed);
+        } catch (Exception ignored) {
+            return true;
+        }
     }
 }
