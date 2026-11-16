@@ -13,6 +13,8 @@ import net.minecraftforge.fml.ModList;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.core.event.ZoneEvents;
+import ru.rorcik.core.city.CityZone;
+import ru.rorcik.core.city.CityZoneProviders;
 import ru.rorcik.core.zone.BiomeZoneRegistry;
 import ru.rorcik.core.zone.TemperatureZone;
 import ru.rorcik.core.zone.ZoneRegistrySavedData;
@@ -171,8 +173,16 @@ public class CityZonePlanner {
         );
 
         if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Info: [CITY-PLANNER] Reserved random {} city at [{}, {}] with {} zone chunks",
-                    typeId, candidate.centerX(), candidate.centerZ(), affectedChunks.size());
+            CityZone providerZone = CityZoneProviders.getProvider() != null
+                    ? CityZoneProviders.getProvider().getZoneAtChunk(candidate.centerX() >> 4, candidate.centerZ() >> 4)
+                    : null;
+            String biomeId = level.getBiome(new BlockPos(candidate.centerX(), level.getSeaLevel(), candidate.centerZ()))
+                    .unwrapKey()
+                    .map(key -> key.location().toString())
+                    .orElse("unknown");
+            LOGGER.info("Info: [CITY-PLANNER] Reserved random {} city at [{}, {}] with {} zone chunks, providerZone={}, biomeAtCenter={}",
+                    typeId, candidate.centerX(), candidate.centerZ(), affectedChunks.size(),
+                    providerZone != null ? providerZone.typeId() : "none", biomeId);
         }
         return true;
     }
