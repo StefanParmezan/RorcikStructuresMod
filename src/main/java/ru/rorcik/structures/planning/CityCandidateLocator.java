@@ -48,6 +48,30 @@ public final class CityCandidateLocator {
         return candidates;
     }
 
+    public List<CityCandidate> rawCandidatesNear(int blockX, int blockZ, int radius) {
+        int clampedRadius = Math.max(0, radius);
+        Set<CityCandidate> candidates = new HashSet<>();
+
+        for (CityType type : CityType.values()) {
+            int cellSize = cellSize(type);
+            int minCellX = Math.floorDiv(blockX - clampedRadius, cellSize);
+            int maxCellX = Math.floorDiv(blockX + clampedRadius, cellSize);
+            int minCellZ = Math.floorDiv(blockZ - clampedRadius, cellSize);
+            int maxCellZ = Math.floorDiv(blockZ + clampedRadius, cellSize);
+
+            for (int cellX = minCellX; cellX <= maxCellX; cellX++) {
+                for (int cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
+                    CityCandidate candidate = rawCandidate(type, cellX, cellZ);
+                    if (Math.abs(candidate.centerX() - blockX) > clampedRadius) continue;
+                    if (Math.abs(candidate.centerZ() - blockZ) > clampedRadius) continue;
+                    candidates.add(candidate);
+                }
+            }
+        }
+
+        return new ArrayList<>(candidates);
+    }
+
     private boolean isValid(CityCandidate candidate) {
         for (CityType type : CityType.values()) {
             int cellSize = cellSize(type);

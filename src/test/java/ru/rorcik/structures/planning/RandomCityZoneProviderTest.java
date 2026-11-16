@@ -2,6 +2,7 @@ package ru.rorcik.structures.planning;
 
 import org.junit.jupiter.api.Test;
 import ru.rorcik.core.city.CityZone;
+import ru.rorcik.structures.city.CityType;
 
 import java.util.List;
 
@@ -51,12 +52,23 @@ class RandomCityZoneProviderTest {
 
     @Test
     void validatorCanRejectCandidates() {
-        RandomCityZoneProvider provider = new RandomCityZoneProvider(42L, 63, candidate -> false);
+        RandomCityZoneProvider provider = new RandomCityZoneProvider(42L, 63, candidate -> null);
         CityCandidate candidate = new CityCandidateLocator(42L).candidatesNear(0, 0, 20000).get(0);
         int chunkX = candidate.centerX() >> 4;
         int chunkZ = candidate.centerZ() >> 4;
 
         assertNull(provider.getZoneAtChunk(chunkX, chunkZ));
         assertTrue(provider.getNearbyZones(candidate.centerX(), candidate.centerZ(), 0).isEmpty());
+    }
+
+    @Test
+    void validatorCanResolveCandidateType() {
+        RandomCityZoneProvider provider = new RandomCityZoneProvider(
+                42L, 63, candidate -> CityType.PLAINS
+        );
+        List<CityCandidate> candidates = provider.candidatesNear(0, 0, 20000);
+
+        assertNotNull(candidates);
+        assertTrue(candidates.stream().allMatch(candidate -> candidate.type() == CityType.PLAINS));
     }
 }

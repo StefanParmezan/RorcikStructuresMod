@@ -6,7 +6,9 @@ import ru.rorcik.structures.city.CityType;
 import ru.rorcik.structures.data.city.plains.config_loaders.ParkConfigLoader;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class RandomCityZoneProvider implements CityZoneProvider {
@@ -14,18 +16,19 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
     private static final int MAX_CITY_RADIUS = 2048;
     private static final int MAX_CACHED_PLANS = 4096;
     private static final int MAX_CACHED_ZONES = 8192;
+    private static final int MAX_MIN_DISTANCE = maxMinDistance();
 
     private final long seed;
     private final int seaLevel;
     private final CityCandidateLocator candidateLocator;
     private final CityCandidateValidator candidateValidator;
     private final ConcurrentHashMap<PlanKey, CityLayoutPlan> plans = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<PlanKey, Boolean> validityCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<RawKey, java.util.Optional<CityType>> typeCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, java.util.Optional<CityZone>> zoneCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<NearbyKey, List<CityLayoutPlan>> nearbyCache = new ConcurrentHashMap<>();
 
     public RandomCityZoneProvider(long seed, int seaLevel) {
-        this(seed, seaLevel, candidate -> true);
+        this(seed, seaLevel, candidate -> candidate.type());
     }
 
     public RandomCityZoneProvider(long seed, int seaLevel, CityCandidateValidator candidateValidator) {
@@ -58,9 +61,7 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
         CityZone best = null;
         long bestDistance = Long.MAX_VALUE;
 
-        for (CityCandidate candidate : candidateLocator.candidatesNear(blockX, blockZ, MAX_CITY_RADIUS)) {
-            if (!isValidCandidate(candidate)) continue;
-
+        for (CityCandidate candidate : resolveCandidates(blockX, blockZ, MAX_CITY_RADIUS)) {
             CityLayoutPlan plan = plan(candidate);
             long chunkKey = chunkKey(chunkX, chunkZ);
             if (!plan.zoneChunks().contains(chunkKey)) continue;
@@ -91,9 +92,7 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
             int queryRadius = clampedRadius + MAX_CITY_RADIUS + 16;
             List<CityLayoutPlan> computed = new ArrayList<>();
 
-            for (CityCandidate candidate : candidateLocator.candidatesNear(centerX, centerZ, queryRadius)) {
-                if (!isValidCandidate(candidate)) continue;
-
+            for (CityCandidate candidate : resolveCandidates(centerX, centerZ, queryRadius)) {
                 computed.add(plan(candidate));
             }
 
@@ -134,15 +133,70 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
     }
 
     public List<CityCandidate> candidatesNear(int blockX, int blockZ, int radius) {
-        return candidateLocator.candidatesNear(blockX, blockZ, radius);
+        return resolveCandidates(blockX, blockZ, radius);
     }
 
     public boolean isCandidateValid(CityCandidate candidate) {
-        return isValidCandidate(candidate);
+        return resolveType(candidate) != null;
     }
 
     public CityLayoutPlan getLayoutPlan(CityCandidate candidate) {
         return plan(candidate);
+    }
+
+    private List<CityCandidate> resolveCandidates(int blockX, int blockZ, int radius) {
+        int clampedRadius = Math.max(0, radius);
+        int queryRadius = clampedRadius + MAX_MIN_DISTANCE;
+        List<CityCandidate> rawCandidates = candidateLocator.rawCandidatesNear(blockX, blockZ, queryRadius);
+
+        Map<TypedKey, CityCandidate> typed = new HashMap<>();
+        for (CityCandidate raw : rawCandidates) {
+            CityType type = resolveType(raw);
+            if (type == null) continue;
+
+            CityCandidate candidate = new CityCandidate(raw.centerX(), raw.centerZ(), type, raw.rank());
+            TypedKey key = new TypedKey(type, candidate.centerX(), candidate.centerZ());
+            typed.merge(key, candidate, (first, second) ->
+                    comparePriority(first, second) <= 0 ? first : second);
+        }
+
+        List<CityCandidate> resolved = new ArrayList<>();
+        for (CityCandidate candidate : typed.values()) {
+            if (Math.abs(candidate.centerX() - blockX) > clampedRadius) continue;
+            if (Math.abs(candidate.centerZ() - blockZ) > clampedRadius) continue;
+            if (!hasConflict(candidate, typed.values())) {
+                resolved.add(candidate);
+            }
+        }
+        resolved.sort((first, second) -> comparePriority(first, second));
+        return resolved;
+    }
+
+    private static boolean hasConflict(CityCandidate candidate, Iterable<CityCandidate> others) {
+        for (CityCandidate other : others) {
+            if (other.equals(candidate)) continue;
+
+            int requiredDistance = Math.max(candidate.minDistance(), other.minDistance());
+            long dx = (long) candidate.centerX() - other.centerX();
+            long dz = (long) candidate.centerZ() - other.centerZ();
+            if (dx * dx + dz * dz >= (long) requiredDistance * requiredDistance) continue;
+
+            if (comparePriority(other, candidate) < 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private CityType resolveType(CityCandidate candidate) {
+        if (typeCache.size() > MAX_CACHED_PLANS) {
+            typeCache.clear();
+        }
+
+        RawKey key = new RawKey(candidate.type(), candidate.centerX(), candidate.centerZ());
+        return typeCache.computeIfAbsent(key, ignored ->
+                java.util.Optional.ofNullable(candidateValidator.resolveType(candidate))
+        ).orElse(null);
     }
 
     private CityLayoutPlan plan(CityCandidate candidate) {
@@ -161,20 +215,35 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
         });
     }
 
-    private boolean isValidCandidate(CityCandidate candidate) {
-        if (validityCache.size() > MAX_CACHED_PLANS) {
-            validityCache.clear();
-        }
+    private static int comparePriority(CityCandidate first, CityCandidate second) {
+        int byRank = Long.compare(first.rank(), second.rank());
+        if (byRank != 0) return byRank;
 
-        PlanKey key = planKey(candidate);
-        return validityCache.computeIfAbsent(key, ignored -> candidateValidator.isValid(candidate));
+        int byX = Integer.compare(first.centerX(), second.centerX());
+        if (byX != 0) return byX;
+
+        return Integer.compare(first.centerZ(), second.centerZ());
     }
 
     private static PlanKey planKey(CityCandidate candidate) {
         return new PlanKey(candidate.type(), candidate.centerX(), candidate.centerZ());
     }
 
+    private static int maxMinDistance() {
+        int max = 0;
+        for (CityType type : CityType.values()) {
+            max = Math.max(max, type.minDistance);
+        }
+        return max;
+    }
+
     private record PlanKey(CityType type, int centerX, int centerZ) {
+    }
+
+    private record RawKey(CityType type, int centerX, int centerZ) {
+    }
+
+    private record TypedKey(CityType type, int centerX, int centerZ) {
     }
 
     private record NearbyKey(int chunkX, int chunkZ, int radius) {
