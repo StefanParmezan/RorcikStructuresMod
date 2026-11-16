@@ -39,21 +39,12 @@ public interface CityCandidateValidator {
             if (biomeId == null) return null;
 
             TemperatureZone zone = CityZonePlanner.getBiomeTemperatureZone(biomeId, biome.value());
-            if (zone == null) return null;
+            if (zone == null || !candidate.type().allowedZones.contains(zone)) return null;
 
             boolean hot = zone == TemperatureZone.HOT || zone == TemperatureZone.EXTREME_HOT;
             if (!hot && !CityZonePlanner.isAllowedByRwg(biomeId)) return null;
 
-            if (candidate.type().allowedZones.contains(zone)) {
-                return candidate.type();
-            }
-
-            for (CityType type : CityType.values()) {
-                if (type.allowedZones.contains(zone)) {
-                    return type;
-                }
-            }
-            return null;
+            return candidate.type();
         };
     }
 }
