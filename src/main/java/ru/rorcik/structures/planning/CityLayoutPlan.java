@@ -21,6 +21,7 @@ public record CityLayoutPlan(
         Set<BlockPos> straightPositions,
         List<BuildingSlot> slots,
         Set<Long> chunks,
+        Set<Long> zoneChunks,
         CityZone zone
 ) {
 
@@ -29,5 +30,6 @@ public record CityLayoutPlan(
         straightPositions = Set.copyOf(straightPositions);
         slots = List.copyOf(slots);
         chunks = Set.copyOf(chunks);
+        zoneChunks = Set.copyOf(zoneChunks);
     }
 }

@@ -22,7 +22,7 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
     private final ConcurrentHashMap<PlanKey, CityLayoutPlan> plans = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<PlanKey, Boolean> validityCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, java.util.Optional<CityZone>> zoneCache = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<NearbyKey, List<CityZone>> nearbyCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<NearbyKey, List<CityLayoutPlan>> nearbyCache = new ConcurrentHashMap<>();
 
     public RandomCityZoneProvider(long seed, int seaLevel) {
         this(seed, seaLevel, candidate -> true);
@@ -61,9 +61,11 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
         for (CityCandidate candidate : candidateLocator.candidatesNear(blockX, blockZ, MAX_CITY_RADIUS)) {
             if (!isValidCandidate(candidate)) continue;
 
-            CityZone zone = plan(candidate).zone();
-            if (!zone.containsChunk(chunkX, chunkZ)) continue;
+            CityLayoutPlan plan = plan(candidate);
+            long chunkKey = chunkKey(chunkX, chunkZ);
+            if (!plan.zoneChunks().contains(chunkKey)) continue;
 
+            CityZone zone = plan.zone();
             long dx = (long) blockX - candidate.centerX();
             long dz = (long) blockZ - candidate.centerZ();
             long distance = dx * dx + dz * dz;
@@ -82,17 +84,17 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
         int chunkZ = blockZ >> 4;
         NearbyKey key = new NearbyKey(chunkX, chunkZ, clampedRadius);
 
-        List<CityZone> cached = nearbyCache.get(key);
+        List<CityLayoutPlan> cached = nearbyCache.get(key);
         if (cached == null) {
             int centerX = (chunkX << 4) + 8;
             int centerZ = (chunkZ << 4) + 8;
             int queryRadius = clampedRadius + MAX_CITY_RADIUS + 16;
-            List<CityZone> computed = new ArrayList<>();
+            List<CityLayoutPlan> computed = new ArrayList<>();
 
             for (CityCandidate candidate : candidateLocator.candidatesNear(centerX, centerZ, queryRadius)) {
                 if (!isValidCandidate(candidate)) continue;
 
-                computed.add(plan(candidate).zone());
+                computed.add(plan(candidate));
             }
 
             if (nearbyCache.size() > MAX_CACHED_ZONES) {
@@ -106,14 +108,29 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
         int maxX = blockX + clampedRadius;
         int minZ = blockZ - clampedRadius;
         int maxZ = blockZ + clampedRadius;
+        int minChunkX = minX >> 4;
+        int maxChunkX = maxX >> 4;
+        int minChunkZ = minZ >> 4;
+        int maxChunkZ = maxZ >> 4;
 
         List<CityZone> zones = new ArrayList<>();
-        for (CityZone zone : cached) {
-            if (zone.intersectsBlocks(minX, minZ, maxX, maxZ)) {
-                zones.add(zone);
-            }
+        for (CityLayoutPlan plan : cached) {
+            if (!intersectsZoneChunks(plan, minChunkX, minChunkZ, maxChunkX, maxChunkZ)) continue;
+            zones.add(plan.zone());
         }
         return zones;
+    }
+
+    private static boolean intersectsZoneChunks(CityLayoutPlan plan, int minChunkX, int minChunkZ,
+                                                int maxChunkX, int maxChunkZ) {
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                if (plan.zoneChunks().contains(chunkKey(chunkX, chunkZ))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public List<CityCandidate> candidatesNear(int blockX, int blockZ, int radius) {

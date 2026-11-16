@@ -122,7 +122,7 @@ public class CityZonePlanner {
         String typeId = candidate.type().id;
         int anchorChunkSize = plan.anchorChunkSize();
         int shift = Integer.numberOfTrailingZeros(anchorChunkSize);
-        Set<Long> affectedChunks = expandCityChunks(plan.chunks(), CITY_CHUNK_BORDER);
+        Set<Long> affectedChunks = plan.zoneChunks();
 
         CityJournal journal = CityJournal.load(candidate.centerX(), candidate.centerZ(), typeId, level);
         journal.initializeCity(plan.seed(), plan.baseY(), plan.zone().targetHeight());

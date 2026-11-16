@@ -110,7 +110,7 @@ public final class CityLayoutPlanner {
                 targetHeight(type, baseY), minChunkX, minChunkZ, maxChunkX, maxChunkZ);
 
         return new CityLayoutPlan(citySeed, centerX, centerZ, type, baseY, anchorChunkSize,
-                nodeMap, straightPositions, slots, chunks, zone);
+                nodeMap, straightPositions, slots, chunks, zoneChunks, zone);
     }
 
     private static int targetHeight(CityType type, int seaLevel) {
