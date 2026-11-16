@@ -116,6 +116,18 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
         return zones;
     }
 
+    public List<CityCandidate> candidatesNear(int blockX, int blockZ, int radius) {
+        return candidateLocator.candidatesNear(blockX, blockZ, radius);
+    }
+
+    public boolean isCandidateValid(CityCandidate candidate) {
+        return isValidCandidate(candidate);
+    }
+
+    public CityLayoutPlan getLayoutPlan(CityCandidate candidate) {
+        return plan(candidate);
+    }
+
     private CityLayoutPlan plan(CityCandidate candidate) {
         if (plans.size() > MAX_CACHED_PLANS) {
             plans.clear();

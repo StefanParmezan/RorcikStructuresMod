@@ -67,6 +67,7 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.IntValue PROXIMITY_CHECK_INTERVAL_TICKS;
 
     public static final ForgeConfigSpec.BooleanValue ENABLE_ROAD_DECORATIONS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_CITY_COORDS;
 
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> PLAINS_CITY_COORDS;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> DESERT_CITY_COORDS;
@@ -123,6 +124,7 @@ public class RorcikStructuresModConfig {
     public static int proximityCheckIntervalTicks;
 
     public static boolean enableRoadDecorations;
+    public static boolean enableCityCords;
 
     public static List<String> plainsCityCoords;
     public static List<String> desertCityCoords;
@@ -191,6 +193,11 @@ public class RorcikStructuresModConfig {
         BUILDER.pop();
 
         BUILDER.comment("City Spawn Coordinates").push("spawn_coordinates");
+        ENABLE_CITY_COORDS = BUILDER.comment(
+                "Use manual city coordinates from the lists below.",
+                "When false, cities are generated randomly across the world."
+        ).define("enableCityCords", true);
+
         PLAINS_CITY_COORDS = BUILDER.comment(
                 "List of coordinates for Plains cities in 'x,z' format.",
                 "Example: ['11000,0', '-11000,0']"
@@ -262,6 +269,7 @@ public class RorcikStructuresModConfig {
         desertYOffset = DESERT_Y_OFFSET.get();
 
         enableRoadDecorations = ENABLE_ROAD_DECORATIONS.get();
+        enableCityCords = ENABLE_CITY_COORDS.get();
         workerPoolSize = WORKER_POOL_SIZE.get();
         bufferDistance = BUFFER_DISTANCE.get();
         abandonDistance = ABANDON_DISTANCE.get();

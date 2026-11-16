@@ -16,6 +16,7 @@ import ru.rorcik.core.event.ZoneEvents;
 import ru.rorcik.core.zone.BiomeZoneRegistry;
 import ru.rorcik.core.zone.TemperatureZone;
 import ru.rorcik.core.zone.ZoneRegistrySavedData;
+import ru.rorcik.core.zone.ZoneRules;
 import ru.rorcik.structures.city.CityType;
 import ru.rorcik.structures.common.RorcikStructuresModConfig;
 import ru.rorcik.structures.data.city.plains.config_loaders.ParkConfigLoader;
@@ -109,6 +110,71 @@ public class CityZonePlanner {
             LOGGER.error("Error: [CITY-PLANNER] Exception in tryReserveCity at [{}, {}]: {}", centerX, centerZ, e.getMessage(), e);
             return false;
         }
+    }
+
+    public static boolean tryReserveRandomCity(ServerLevel level, CityCandidate candidate, CityLayoutPlan plan) {
+        ZoneRegistrySavedData registry = ZoneRegistrySavedData.get(level);
+        if (registry.isReserved(candidate.centerX(), candidate.centerZ())) return false;
+
+        ZoneRules rules = candidate.type().toZoneRules();
+        if (!registry.tryReserveZone(candidate.centerX(), candidate.centerZ(), rules)) return false;
+
+        String typeId = candidate.type().id;
+        int anchorChunkSize = plan.anchorChunkSize();
+        int shift = Integer.numberOfTrailingZeros(anchorChunkSize);
+        Set<Long> affectedChunks = expandCityChunks(plan.chunks(), CITY_CHUNK_BORDER);
+
+        CityJournal journal = CityJournal.load(candidate.centerX(), candidate.centerZ(), typeId, level);
+        journal.initializeCity(plan.seed(), plan.baseY(), plan.zone().targetHeight());
+
+        for (Map.Entry<BlockPos, RoadNode> entry : plan.nodeMap().entrySet()) {
+            journal.addRoadNode(
+                    (entry.getKey().getX() >> (4 + shift)) << shift,
+                    (entry.getKey().getZ() >> (4 + shift)) << shift,
+                    entry.getValue()
+            );
+        }
+        for (BlockPos pos : plan.straightPositions()) {
+            journal.addStraightRoad(
+                    (pos.getX() >> (4 + shift)) << shift,
+                    (pos.getZ() >> (4 + shift)) << shift,
+                    pos
+            );
+        }
+        for (BuildingSlot slot : plan.slots()) {
+            journal.addSlot(
+                    (slot.position().getX() >> (4 + shift)) << shift,
+                    (slot.position().getZ() >> (4 + shift)) << shift,
+                    slot
+            );
+        }
+
+        journal.setRoadNetworkData(new RoadNetwork());
+        journal.save();
+
+        String worldId = CityJournal.getWorldId(level);
+        CityGenerationContext context = new CityGenerationContext(
+                worldId, candidate.centerX(), candidate.centerZ(), typeId, plan.zone().targetHeight(),
+                plan.nodeMap(), plan.straightPositions(), plan.slots(), new RoadNetwork(),
+                plan.seed(), plan.baseY(), anchorChunkSize
+        );
+        CityGenerationContextRegistry.register(context);
+        CityGenerationSavedData.get(level).registerCity(
+                candidate.centerX(), candidate.centerZ(), plan.zone().targetHeight()
+        );
+
+        MinecraftForge.EVENT_BUS.post(new ZoneEvents.ZoneReservedEvent(
+                candidate.centerX(), candidate.centerZ(), rules, plan.zone().targetHeight(), affectedChunks
+        ));
+        PlayerProximityTracker.registerCity(
+                worldId, candidate.centerX(), candidate.centerZ(), typeId, affectedChunks
+        );
+
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("Info: [CITY-PLANNER] Reserved random {} city at [{}, {}] with {} zone chunks",
+                    typeId, candidate.centerX(), candidate.centerZ(), affectedChunks.size());
+        }
+        return true;
     }
 
     public static CityGenerationContext rebuildContext(ServerLevel level, int centerX, int centerZ, String typeId) {

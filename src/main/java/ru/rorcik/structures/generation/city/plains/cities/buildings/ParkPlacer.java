@@ -85,12 +85,39 @@ public class ParkPlacer {
     }
 
     public static void placePark(ServerLevel level, BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
+        ParkWorldTracker tracker = ParkWorldTracker.get(level);
+        if (park.hasWorldLimit() && !tracker.canSpawn(park.name(), park.worldCount())) {
+            ParkConfig replacement = findReplacementParkSameSize(level, park, tracker, level.getRandom());
+            if (replacement == null) {
+                LOGGER.warn("Warn: [PARK] '{}' reached world limit and no same-size replacement is available",
+                        park.name());
+                return;
+            }
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [PARK] '{}' reached world limit, using '{}' instead",
+                        park.name(), replacement.name());
+            }
+            park = replacement;
+        }
+
         BlockPos placementPos = calculatePlacementOrigin(roadPos, side, park, rotation);
         StructureUtils.placeStructureUsingOriginPivot(
                 level, placementPos, ModPaths.parkNbtPath(park.name()), rotation, false, false
         );
-        ParkWorldTracker tracker = ParkWorldTracker.get(level);
         tracker.increment(park.name());
+    }
+
+    public static ParkConfig findReplacementParkSameSize(ServerLevel level, ParkConfig original,
+                                                         ParkWorldTracker tracker, RandomSource random) {
+        List<ParkConfig> candidates = new ArrayList<>();
+        for (ParkConfig park : ParkConfigLoader.getParks()) {
+            if (park.name().equals(original.name())) continue;
+            if (park.size()[0] != original.size()[0] || park.size()[2] != original.size()[2]) continue;
+            if (!park.canSpawn(tracker.getCount(park.name()))) continue;
+            candidates.add(park);
+        }
+        if (candidates.isEmpty()) return null;
+        return candidates.get(random.nextInt(candidates.size()));
     }
 
     private static BlockPos calculatePlacementOrigin(BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
