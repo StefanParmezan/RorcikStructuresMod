@@ -25,7 +25,7 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
     private final ConcurrentHashMap<PlanKey, CityLayoutPlan> plans = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<RawKey, java.util.Optional<CityType>> typeCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, java.util.Optional<CityZone>> zoneCache = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<NearbyKey, List<CityLayoutPlan>> nearbyCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<NearbyKey, List<CityZone>> nearbyCache = new ConcurrentHashMap<>();
 
     public RandomCityZoneProvider(long seed, int seaLevel) {
         this(seed, seaLevel, candidate -> candidate.type());
@@ -85,39 +85,36 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
         int chunkZ = blockZ >> 4;
         NearbyKey key = new NearbyKey(chunkX, chunkZ, clampedRadius);
 
-        List<CityLayoutPlan> cached = nearbyCache.get(key);
-        if (cached == null) {
-            int centerX = (chunkX << 4) + 8;
-            int centerZ = (chunkZ << 4) + 8;
-            int queryRadius = clampedRadius + MAX_CITY_RADIUS + 16;
-            List<CityLayoutPlan> computed = new ArrayList<>();
-
-            for (CityCandidate candidate : resolveCandidates(centerX, centerZ, queryRadius)) {
-                computed.add(plan(candidate));
-            }
-
-            if (nearbyCache.size() > MAX_CACHED_ZONES) {
-                nearbyCache.clear();
-            }
-            cached = computed;
-            nearbyCache.put(key, cached);
+        List<CityZone> cached = nearbyCache.get(key);
+        if (cached != null) {
+            return cached;
         }
 
-        int minX = blockX - clampedRadius;
-        int maxX = blockX + clampedRadius;
-        int minZ = blockZ - clampedRadius;
-        int maxZ = blockZ + clampedRadius;
-        int minChunkX = minX >> 4;
-        int maxChunkX = maxX >> 4;
-        int minChunkZ = minZ >> 4;
-        int maxChunkZ = maxZ >> 4;
+        int centerX = (chunkX << 4) + 8;
+        int centerZ = (chunkZ << 4) + 8;
+        int queryRadius = clampedRadius + MAX_CITY_RADIUS + 16;
 
-        List<CityZone> zones = new ArrayList<>();
-        for (CityLayoutPlan plan : cached) {
+        int minBlockX = (chunkX << 4) - clampedRadius - 16;
+        int maxBlockX = (chunkX << 4) + 15 + clampedRadius + 16;
+        int minBlockZ = (chunkZ << 4) - clampedRadius - 16;
+        int maxBlockZ = (chunkZ << 4) + 15 + clampedRadius + 16;
+        int minChunkX = minBlockX >> 4;
+        int maxChunkX = maxBlockX >> 4;
+        int minChunkZ = minBlockZ >> 4;
+        int maxChunkZ = maxBlockZ >> 4;
+
+        List<CityZone> computed = new ArrayList<>();
+        for (CityCandidate candidate : resolveCandidates(centerX, centerZ, queryRadius)) {
+            CityLayoutPlan plan = plan(candidate);
             if (!intersectsZoneChunks(plan, minChunkX, minChunkZ, maxChunkX, maxChunkZ)) continue;
-            zones.add(plan.zone());
+            computed.add(plan.zone());
         }
-        return zones;
+
+        if (nearbyCache.size() > MAX_CACHED_ZONES) {
+            nearbyCache.clear();
+        }
+        nearbyCache.put(key, computed);
+        return computed;
     }
 
     private static boolean intersectsZoneChunks(CityLayoutPlan plan, int minChunkX, int minChunkZ,
