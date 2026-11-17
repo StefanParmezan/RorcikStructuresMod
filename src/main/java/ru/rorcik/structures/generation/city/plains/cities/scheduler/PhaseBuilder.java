@@ -60,7 +60,7 @@ public class PhaseBuilder {
         String slotId = anchorChunkX + "," + anchorChunkZ + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
         List<Phase> phases = new ArrayList<>();
         phases.add(new Phase(PhaseType.ROAD, () -> placeRoadForNode(node, pos), collectRoadTemplatesForNode(node)));
-        return new SlotWork(slotId, "ROAD_NODE", phases);
+        return new SlotWork(slotId, "ROAD_NODE", phases, roadFootprints(node, pos));
     }
 
     public SlotWork buildForStraightRoad(BlockPos pos, int anchorChunkSize) {
@@ -70,7 +70,18 @@ public class PhaseBuilder {
         String slotId = anchorChunkX + "," + anchorChunkZ + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
         List<Phase> phases = new ArrayList<>();
         phases.add(new Phase(PhaseType.ROAD, () -> placeStraightRoad(pos), collectStraightRoadTemplates()));
-        return new SlotWork(slotId, "STRAIGHT_ROAD", phases);
+        Rotation rotation = SlotFootprintCalculator.straightRoadRotation(detectRoadDirection(pos));
+        return new SlotWork(slotId, "STRAIGHT_ROAD", phases,
+                SlotFootprintCalculator.forRoad(pos, "s", rotation));
+    }
+
+    private static List<SlotWork.Footprint> roadFootprints(RoadNode node, BlockPos pos) {
+        List<Direction> connections = node.getAllConnections();
+        if (connections.isEmpty()) return List.of();
+
+        RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
+        if (entry == null) return List.of();
+        return SlotFootprintCalculator.forRoad(pos, entry.type(), entry.rotation());
     }
 
     public SlotWork buildForBuildingSlot(BuildingSlot slot, int anchorChunkSize) {
@@ -78,10 +89,11 @@ public class PhaseBuilder {
         int shift = Integer.numberOfTrailingZeros(anchorChunkSize);
         int anchorChunkX = (pos.getX() >> (4 + shift)) << shift;
         int anchorChunkZ = (pos.getZ() >> (4 + shift)) << shift;
-        String slotId = anchorChunkX + "," + anchorChunkZ + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
+        String category = slot.category();
+        String slotId = anchorChunkX + "," + anchorChunkZ + ":" + category + ":"
+                + pos.getX() + "," + pos.getY() + "," + pos.getZ();
 
         List<Phase> phases = new ArrayList<>();
-        String category = slot.category();
 
         if ("houses".equals(category)) {
             AtomicBoolean housePlaced = new AtomicBoolean(false);
@@ -89,7 +101,7 @@ public class PhaseBuilder {
                     () -> {
                         boolean placed = BuildingPlacer.placeBuildingShell(level, slot);
                         housePlaced.set(placed);
-                        journal.markHousePlaced(anchorChunkX, anchorChunkZ, pos.getX(), pos.getY(), pos.getZ(), placed);
+                        journal.markHousePlaced(anchorChunkX, anchorChunkZ, category, pos.getX(), pos.getY(), pos.getZ(), placed);
                     },
                     BuildingGenerator.collectRequiredBuildTemplates(List.of(slot))));
             phases.add(new Phase(PhaseType.INSTALL, () -> {}, Collections.emptySet()));
@@ -108,11 +120,12 @@ public class PhaseBuilder {
                     },
                     SidewalkPlacer.collectRequiredTemplates()));
         } else if ("desert".equals(category) || "parks".equals(category) || "platforms".equals(category) || "other".equals(category) || "lootable".equals(category)) {
-            phases.add(new Phase(PhaseType.INSTALL,
+            PhaseType phaseType = "platforms".equals(category) ? PhaseType.PLATFORM : PhaseType.INSTALL;
+            phases.add(new Phase(phaseType,
                     () -> BuildingPlacer.placeBuilding(level, slot),
                     BuildingGenerator.collectRequiredBuildTemplates(List.of(slot))));
         }
-        return new SlotWork(slotId, "BUILDING", phases);
+        return new SlotWork(slotId, "BUILDING", phases, SlotFootprintCalculator.forBuildingSlot(slot));
     }
 
     private void placeRoadForNode(RoadNode node, BlockPos pos) {

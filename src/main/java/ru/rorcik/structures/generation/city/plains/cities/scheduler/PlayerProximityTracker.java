@@ -76,6 +76,12 @@ public class PlayerProximityTracker {
 
         CityBuildScheduler.updatePriorities(playerX, playerZ);
 
+        CityInfo generating = null;
+        CityInfo nearestPending = null;
+        double nearestPendingDistance = Double.MAX_VALUE;
+        CityInfo nearestPaused = null;
+        double nearestPausedDistance = Double.MAX_VALUE;
+
         Iterator<Map.Entry<String, CityInfo>> iterator = ACTIVE_CITIES.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, CityInfo> entry = iterator.next();
@@ -97,15 +103,9 @@ public class PlayerProximityTracker {
 
             switch (city.state) {
                 case PENDING:
-                    if (distance <= bufferDistance) {
-                        if (RorcikStructuresModConfig.enableLogging) {
-                            LOGGER.info("Info: [PROXIMITY] Player approached city '{}' (distance={} <= {})", city.cityId, distance, bufferDistance);
-                        }
-                        city.state = CityState.GENERATING;
-                        if (!startGeneration(city, level, playerX, playerZ)) {
-                            LOGGER.warn("Warn: [PROXIMITY] startGeneration failed for '{}', reverting to PENDING", city.cityId);
-                            city.state = CityState.PENDING;
-                        }
+                    if (distance <= bufferDistance && distance < nearestPendingDistance) {
+                        nearestPending = city;
+                        nearestPendingDistance = distance;
                     }
                     break;
                 case GENERATING:
@@ -115,23 +115,44 @@ public class PlayerProximityTracker {
                         }
                         city.state = CityState.PAUSED;
                         CityBuildScheduler.pauseCityGeneration(city, level);
+                    } else {
+                        generating = city;
                     }
                     break;
                 case PAUSED:
-                    if (distance <= bufferDistance) {
-                        if (RorcikStructuresModConfig.enableLogging) {
-                            LOGGER.info("Info: [PROXIMITY] Player returned to city '{}' — resuming", city.cityId);
-                        }
-                        city.state = CityState.GENERATING;
-                        if (!CityBuildScheduler.resumeCityGeneration(city, level, playerX, playerZ)) {
-                            LOGGER.warn("Warn: [PROXIMITY] resumeCityGeneration failed for '{}', reverting to PAUSED", city.cityId);
-                            city.state = CityState.PAUSED;
-                        }
+                    if (distance <= bufferDistance && distance < nearestPausedDistance) {
+                        nearestPaused = city;
+                        nearestPausedDistance = distance;
                     }
                     break;
                 case COMPLETED:
                     iterator.remove();
                     break;
+            }
+        }
+
+        // Generate one city at a time: a city build is heavy and starting
+        // several nearby cities at once floods the tick scheduler.
+        if (generating == null) {
+            if (nearestPending != null) {
+                if (RorcikStructuresModConfig.enableLogging) {
+                    LOGGER.info("Info: [PROXIMITY] Player approached city '{}' (distance={} <= {})",
+                            nearestPending.cityId, (int) nearestPendingDistance, bufferDistance);
+                }
+                nearestPending.state = CityState.GENERATING;
+                if (!startGeneration(nearestPending, level, playerX, playerZ)) {
+                    LOGGER.warn("Warn: [PROXIMITY] startGeneration failed for '{}', reverting to PENDING", nearestPending.cityId);
+                    nearestPending.state = CityState.PENDING;
+                }
+            } else if (nearestPaused != null) {
+                if (RorcikStructuresModConfig.enableLogging) {
+                    LOGGER.info("Info: [PROXIMITY] Player returned to city '{}' — resuming", nearestPaused.cityId);
+                }
+                nearestPaused.state = CityState.GENERATING;
+                if (!CityBuildScheduler.resumeCityGeneration(nearestPaused, level, playerX, playerZ)) {
+                    LOGGER.warn("Warn: [PROXIMITY] resumeCityGeneration failed for '{}', reverting to PAUSED", nearestPaused.cityId);
+                    nearestPaused.state = CityState.PAUSED;
+                }
             }
         }
     }

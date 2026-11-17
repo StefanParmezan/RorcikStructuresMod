@@ -32,7 +32,7 @@ public final class GeneratorConfig {
     public static long TARGET_TICK_TIME_MS = 30;
     public static int MIN_STRUCTURES_PER_TICK = 2;
     public static int MAX_STRUCTURES_PER_TICK = 64;
-    public static int CHUNKS_PER_TICK = 48;
+    public static int CHUNKS_PER_TICK = 8;
     public static int PRELOAD_PER_TICK_DURING_CHUNKS = 6;
     public static int PRELOAD_PER_TICK_BEFORE_BUILD = 15;
 

@@ -51,19 +51,19 @@ public class PriorityTaskQueue {
         }
     }
 
-    public int removeTasksForCity(int cityX, int cityZ) {
-        int removed = 0;
+    public List<AnchorChunkTask> removeTasksForCity(int cityX, int cityZ) {
+        List<AnchorChunkTask> removed = new ArrayList<>();
         Iterator<PrioritizedTask> it = tasks.iterator();
         while (it.hasNext()) {
             PrioritizedTask pt = it.next();
             if (pt.task.centerX() == cityX && pt.task.centerZ() == cityZ
                     && pt.task.state() == AnchorChunkTask.State.PENDING) {
                 it.remove();
-                removed++;
+                removed.add(pt.task);
             }
         }
-        if (RorcikStructuresModConfig.enableLogging && removed > 0) {
-            LOGGER.info("Info: [TASK-QUEUE] Removed {} pending tasks for city [{}, {}]", removed, cityX, cityZ);
+        if (RorcikStructuresModConfig.enableLogging && !removed.isEmpty()) {
+            LOGGER.info("Info: [TASK-QUEUE] Removed {} pending tasks for city [{}, {}]", removed.size(), cityX, cityZ);
         }
         return removed;
     }

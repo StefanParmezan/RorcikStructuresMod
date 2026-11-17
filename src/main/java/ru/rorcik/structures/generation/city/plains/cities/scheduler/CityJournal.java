@@ -82,7 +82,7 @@ public class CityJournal {
         }
 
         public String getKey() {
-            return anchorChunkX + "," + anchorChunkZ + ":" + positionX + "," + positionY + "," + positionZ;
+            return anchorChunkX + "," + anchorChunkZ + ":" + category + ":" + positionX + "," + positionY + "," + positionZ;
         }
 
         public boolean isPending() {
@@ -483,8 +483,14 @@ public class CityJournal {
         return false;
     }
 
-    public void markSlotProcessing(int anchorChunkX, int anchorChunkZ, int posX, int posY, int posZ, String phase) {
-        String key = anchorChunkX + "," + anchorChunkZ + ":" + posX + "," + posY + "," + posZ;
+    private static String slotKey(int anchorChunkX, int anchorChunkZ, String category,
+                                  int posX, int posY, int posZ) {
+        return anchorChunkX + "," + anchorChunkZ + ":" + category + ":" + posX + "," + posY + "," + posZ;
+    }
+
+    public void markSlotProcessing(int anchorChunkX, int anchorChunkZ, String category,
+                                  int posX, int posY, int posZ, String phase) {
+        String key = slotKey(anchorChunkX, anchorChunkZ, category, posX, posY, posZ);
         SlotData slot = slots.get(key);
         if (slot != null) {
             slot.status = SlotStatus.PROCESSING.name();
@@ -496,8 +502,9 @@ public class CityJournal {
         }
     }
 
-    public void markSlotCompleted(int anchorChunkX, int anchorChunkZ, int posX, int posY, int posZ) {
-        String key = anchorChunkX + "," + anchorChunkZ + ":" + posX + "," + posY + "," + posZ;
+    public void markSlotCompleted(int anchorChunkX, int anchorChunkZ, String category,
+                                  int posX, int posY, int posZ) {
+        String key = slotKey(anchorChunkX, anchorChunkZ, category, posX, posY, posZ);
         SlotData slot = slots.get(key);
         if (slot != null) {
             slot.status = SlotStatus.COMPLETED.name();
@@ -509,8 +516,9 @@ public class CityJournal {
         }
     }
 
-    public void markHousePlaced(int anchorChunkX, int anchorChunkZ, int posX, int posY, int posZ, boolean placed) {
-        String key = anchorChunkX + "," + anchorChunkZ + ":" + posX + "," + posY + "," + posZ;
+    public void markHousePlaced(int anchorChunkX, int anchorChunkZ, String category,
+                                int posX, int posY, int posZ, boolean placed) {
+        String key = slotKey(anchorChunkX, anchorChunkZ, category, posX, posY, posZ);
         SlotData slot = slots.get(key);
         if (slot != null && slot.housePlaced != placed) {
             slot.housePlaced = placed;
@@ -518,8 +526,9 @@ public class CityJournal {
         }
     }
 
-    public void markSlotFailed(int anchorChunkX, int anchorChunkZ, int posX, int posY, int posZ) {
-        String key = anchorChunkX + "," + anchorChunkZ + ":" + posX + "," + posY + "," + posZ;
+    public void markSlotFailed(int anchorChunkX, int anchorChunkZ, String category,
+                               int posX, int posY, int posZ) {
+        String key = slotKey(anchorChunkX, anchorChunkZ, category, posX, posY, posZ);
         SlotData slot = slots.get(key);
         if (slot != null) {
             slot.status = SlotStatus.FAILED.name();
@@ -530,8 +539,9 @@ public class CityJournal {
         }
     }
 
-    public void markSlotDeferred(int anchorChunkX, int anchorChunkZ, int posX, int posY, int posZ) {
-        String key = anchorChunkX + "," + anchorChunkZ + ":" + posX + "," + posY + "," + posZ;
+    public void markSlotDeferred(int anchorChunkX, int anchorChunkZ, String category,
+                                 int posX, int posY, int posZ) {
+        String key = slotKey(anchorChunkX, anchorChunkZ, category, posX, posY, posZ);
         SlotData slot = slots.get(key);
         if (slot != null) {
             slot.status = SlotStatus.DEFERRED.name();

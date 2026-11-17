@@ -13,9 +13,12 @@ import net.minecraftforge.fml.ModList;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import ru.rorcik.core.event.ZoneEvents;
+import ru.rorcik.core.city.CityZone;
+import ru.rorcik.core.city.CityZoneProviders;
 import ru.rorcik.core.zone.BiomeZoneRegistry;
 import ru.rorcik.core.zone.TemperatureZone;
 import ru.rorcik.core.zone.ZoneRegistrySavedData;
+import ru.rorcik.core.zone.ZoneRules;
 import ru.rorcik.structures.city.CityType;
 import ru.rorcik.structures.common.RorcikStructuresModConfig;
 import ru.rorcik.structures.data.city.plains.config_loaders.ParkConfigLoader;
@@ -35,7 +38,7 @@ import java.util.*;
 public class CityZonePlanner {
     private static final Logger LOGGER = LogUtils.getLogger();
     public static final int CITY_CHUNK_BORDER = 1;
-    private static final String[] DESERT_BUILDINGS = {
+    static final String[] DESERT_BUILDINGS = {
             "aa", "ab", "ac", "ad", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "z"
     };
 
@@ -55,14 +58,7 @@ public class CityZonePlanner {
             }
 
             if (!"desert".equals(type.id)) {
-                if (ModList.get().isLoaded("rwg")) {
-                    try {
-                        Class<?> rwgConfigClass = Class.forName("ru.rorcik.rwg.RwgConfig");
-                        java.lang.reflect.Method isAllowedMethod = rwgConfigClass.getMethod("isAllowedSpawnBiome", ResourceLocation.class);
-                        Boolean isAllowed = (Boolean) isAllowedMethod.invoke(null, biomeId);
-                        if (Boolean.FALSE.equals(isAllowed)) { return false; }
-                    } catch (Exception e) {  }
-                }
+                if (!isAllowedByRwg(biomeId)) { return false; }
                 TemperatureZone currentZone = getBiomeTemperatureZone(biomeId, biomeHolder.value());
                 if (currentZone == null || !type.allowedZones.contains(currentZone)) {
                     LOGGER.warn("Warn: [CITY-PLANNER] Biome not suitable for type {}", type.id);
@@ -116,6 +112,79 @@ public class CityZonePlanner {
             LOGGER.error("Error: [CITY-PLANNER] Exception in tryReserveCity at [{}, {}]: {}", centerX, centerZ, e.getMessage(), e);
             return false;
         }
+    }
+
+    public static boolean tryReserveRandomCity(ServerLevel level, CityCandidate candidate, CityLayoutPlan plan) {
+        ZoneRegistrySavedData registry = ZoneRegistrySavedData.get(level);
+        if (registry.isReserved(candidate.centerX(), candidate.centerZ())) return false;
+
+        ZoneRules rules = candidate.type().toZoneRules();
+        if (!registry.tryReserveZone(candidate.centerX(), candidate.centerZ(), rules)) return false;
+
+        String typeId = candidate.type().id;
+        int anchorChunkSize = plan.anchorChunkSize();
+        int shift = Integer.numberOfTrailingZeros(anchorChunkSize);
+        Set<Long> affectedChunks = plan.zoneChunks();
+
+        CityJournal journal = CityJournal.load(candidate.centerX(), candidate.centerZ(), typeId, level);
+        journal.initializeCity(plan.seed(), plan.baseY(), plan.zone().targetHeight());
+
+        for (Map.Entry<BlockPos, RoadNode> entry : plan.nodeMap().entrySet()) {
+            journal.addRoadNode(
+                    (entry.getKey().getX() >> (4 + shift)) << shift,
+                    (entry.getKey().getZ() >> (4 + shift)) << shift,
+                    entry.getValue()
+            );
+        }
+        for (BlockPos pos : plan.straightPositions()) {
+            journal.addStraightRoad(
+                    (pos.getX() >> (4 + shift)) << shift,
+                    (pos.getZ() >> (4 + shift)) << shift,
+                    pos
+            );
+        }
+        for (BuildingSlot slot : plan.slots()) {
+            journal.addSlot(
+                    (slot.position().getX() >> (4 + shift)) << shift,
+                    (slot.position().getZ() >> (4 + shift)) << shift,
+                    slot
+            );
+        }
+
+        journal.setRoadNetworkData(new RoadNetwork());
+        journal.save();
+
+        String worldId = CityJournal.getWorldId(level);
+        CityGenerationContext context = new CityGenerationContext(
+                worldId, candidate.centerX(), candidate.centerZ(), typeId, plan.zone().targetHeight(),
+                plan.nodeMap(), plan.straightPositions(), plan.slots(), new RoadNetwork(),
+                plan.seed(), plan.baseY(), anchorChunkSize
+        );
+        CityGenerationContextRegistry.register(context);
+        CityGenerationSavedData.get(level).registerCity(
+                candidate.centerX(), candidate.centerZ(), plan.zone().targetHeight()
+        );
+
+        MinecraftForge.EVENT_BUS.post(new ZoneEvents.ZoneReservedEvent(
+                candidate.centerX(), candidate.centerZ(), rules, plan.zone().targetHeight(), affectedChunks
+        ));
+        PlayerProximityTracker.registerCity(
+                worldId, candidate.centerX(), candidate.centerZ(), typeId, affectedChunks
+        );
+
+        if (RorcikStructuresModConfig.enableLogging) {
+            CityZone providerZone = CityZoneProviders.getProvider() != null
+                    ? CityZoneProviders.getProvider().getZoneAtChunk(candidate.centerX() >> 4, candidate.centerZ() >> 4)
+                    : null;
+            String biomeId = level.getBiome(new BlockPos(candidate.centerX(), level.getSeaLevel(), candidate.centerZ()))
+                    .unwrapKey()
+                    .map(key -> key.location().toString())
+                    .orElse("unknown");
+            LOGGER.info("Info: [CITY-PLANNER] Reserved random {} city at [{}, {}] with {} zone chunks, providerZone={}, biomeAtCenter={}",
+                    typeId, candidate.centerX(), candidate.centerZ(), affectedChunks.size(),
+                    providerZone != null ? providerZone.typeId() : "none", biomeId);
+        }
+        return true;
     }
 
     public static CityGenerationContext rebuildContext(ServerLevel level, int centerX, int centerZ, String typeId) {
@@ -287,7 +356,7 @@ public class CityZonePlanner {
         }
     }
 
-    private static TemperatureZone getBiomeTemperatureZone(ResourceLocation biomeId, Biome biome) {
+    public static TemperatureZone getBiomeTemperatureZone(ResourceLocation biomeId, Biome biome) {
         Optional<TemperatureZone> coreZone = BiomeZoneRegistry.getZone(biomeId);
         if (coreZone.isPresent()) return coreZone.get();
         float temp = biome.getBaseTemperature();
@@ -296,5 +365,18 @@ public class CityZonePlanner {
         if (temp < 0.75f) return TemperatureZone.NEUTRAL;
         if (temp < 0.95f) return TemperatureZone.WARM;
         return TemperatureZone.HOT;
+    }
+
+    public static boolean isAllowedByRwg(ResourceLocation biomeId) {
+        if (!ModList.get().isLoaded("rwg")) return true;
+        try {
+            Class<?> rwgConfigClass = Class.forName("ru.rorcik.rwg.RwgConfig");
+            java.lang.reflect.Method isAllowedMethod =
+                    rwgConfigClass.getMethod("isAllowedSpawnBiome", ResourceLocation.class);
+            Boolean isAllowed = (Boolean) isAllowedMethod.invoke(null, biomeId);
+            return !Boolean.FALSE.equals(isAllowed);
+        } catch (Exception ignored) {
+            return true;
+        }
     }
 }

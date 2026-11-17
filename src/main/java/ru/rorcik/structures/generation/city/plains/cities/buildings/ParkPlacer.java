@@ -85,15 +85,42 @@ public class ParkPlacer {
     }
 
     public static void placePark(ServerLevel level, BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
+        ParkWorldTracker tracker = ParkWorldTracker.get(level);
+        if (park.hasWorldLimit() && !tracker.canSpawn(park.name(), park.worldCount())) {
+            ParkConfig replacement = findReplacementParkSameSize(level, park, tracker, level.getRandom());
+            if (replacement == null) {
+                LOGGER.warn("Warn: [PARK] '{}' reached world limit and no same-size replacement is available",
+                        park.name());
+                return;
+            }
+            if (RorcikStructuresModConfig.enableLogging) {
+                LOGGER.info("Info: [PARK] '{}' reached world limit, using '{}' instead",
+                        park.name(), replacement.name());
+            }
+            park = replacement;
+        }
+
         BlockPos placementPos = calculatePlacementOrigin(roadPos, side, park, rotation);
         StructureUtils.placeStructureUsingOriginPivot(
                 level, placementPos, ModPaths.parkNbtPath(park.name()), rotation, false, false
         );
-        ParkWorldTracker tracker = ParkWorldTracker.get(level);
         tracker.increment(park.name());
     }
 
-    private static BlockPos calculatePlacementOrigin(BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
+    public static ParkConfig findReplacementParkSameSize(ServerLevel level, ParkConfig original,
+                                                         ParkWorldTracker tracker, RandomSource random) {
+        List<ParkConfig> candidates = new ArrayList<>();
+        for (ParkConfig park : ParkConfigLoader.getParks()) {
+            if (park.name().equals(original.name())) continue;
+            if (park.size()[0] != original.size()[0] || park.size()[2] != original.size()[2]) continue;
+            if (!park.canSpawn(tracker.getCount(park.name()))) continue;
+            candidates.add(park);
+        }
+        if (candidates.isEmpty()) return null;
+        return candidates.get(random.nextInt(candidates.size()));
+    }
+
+    public static BlockPos calculatePlacementOrigin(BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
         
         BlockPos startPos = roadPos.relative(side, GeneratorConfig.BUILDING_DISTANCE);
         Set<BlockPos> slots = calculateSlots(startPos, side, park, rotation);
@@ -151,7 +178,7 @@ public class ParkPlacer {
         return available.get(random.nextInt(available.size()));
     }
 
-    private static boolean isRotated90(Rotation rotation) {
+    public static boolean isRotated90(Rotation rotation) {
         return rotation == Rotation.CLOCKWISE_90 || rotation == Rotation.COUNTERCLOCKWISE_90;
     }
 
@@ -165,7 +192,7 @@ public class ParkPlacer {
         return new BlockPos(minX, y, minZ);
     }
 
-    private static int[] getParkBaseSize(ParkConfig park) {
+    public static int[] getParkBaseSize(ParkConfig park) {
         if (!StructureCache.isInitialized()) {
             return new int[]{park.size()[0], park.size()[2]};
         }

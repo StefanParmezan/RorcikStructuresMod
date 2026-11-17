@@ -69,6 +69,7 @@ public class AutoCityReservationListener {
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
+        if (!RorcikStructuresModConfig.enableCityCords) return;
         if (isFullyInitialized) return;
 
         MinecraftServer server = event.getServer();

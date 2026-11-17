@@ -1,6 +1,6 @@
 {
   "name": "tasco_market",
   "size": [128, 128, 128],
-  "yOffset": 0,
+  "yOffset": -1,
   "worldCount": -1
 }
