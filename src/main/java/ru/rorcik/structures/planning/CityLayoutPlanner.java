@@ -53,12 +53,14 @@ public final class CityLayoutPlanner {
         int buildingCount = GeneratorConfig.DESERT_BUILDING_COUNT;
         int stepMin = GeneratorConfig.DESERT_STEP_MIN;
         int stepMax = Math.max(stepMin, GeneratorConfig.DESERT_STEP_MAX);
-        int yOffset = GeneratorConfig.DESERT_Y_OFFSET;
 
+        // Random desert cities flatten to sea level, so buildings must use the
+        // same Y as the zone surface. Applying the legacy terrain-relative
+        // offset here would put them below sea level and flood the city.
         List<BuildingSlot> slots = new ArrayList<>();
         List<BlockPos> placedPositions = new ArrayList<>();
 
-        BlockPos startPos = new BlockPos(centerX, baseY + yOffset, centerZ);
+        BlockPos startPos = new BlockPos(centerX, baseY, centerZ);
         placedPositions.add(startPos);
 
         for (int i = 0; i < buildingCount; i++) {
@@ -68,7 +70,7 @@ public final class CityLayoutPlanner {
 
             int newX = anchorPos.getX() + direction.getStepX() * step;
             int newZ = anchorPos.getZ() + direction.getStepZ() * step;
-            BlockPos pos = new BlockPos(newX, baseY + yOffset, newZ);
+            BlockPos pos = new BlockPos(newX, baseY, newZ);
 
             String buildingName = CityZonePlanner.DESERT_BUILDINGS[random.nextInt(CityZonePlanner.DESERT_BUILDINGS.length)];
             Rotation rotation = Rotation.values()[random.nextInt(4)];
@@ -78,7 +80,7 @@ public final class CityLayoutPlanner {
         }
 
         return buildPlan(citySeed, centerX, centerZ, CityType.DESERT, baseY, 2,
-                new HashMap<>(), new HashSet<>(), slots, baseY + yOffset);
+                new HashMap<>(), new HashSet<>(), slots, baseY);
     }
 
     private static CityLayoutPlan buildPlan(long citySeed, int centerX, int centerZ, CityType type,

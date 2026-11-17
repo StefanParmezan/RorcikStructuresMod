@@ -62,7 +62,18 @@ class CityLayoutPlannerTest {
         CityLayoutPlan plan = CityLayoutPlanner.planDesert(7L, 0, 0, 63);
 
         assertEquals(CityType.DESERT, plan.type());
-        assertEquals(62, plan.zone().targetHeight());
+        assertEquals(63, plan.zone().targetHeight());
         assertFalse(plan.chunks().isEmpty());
+    }
+
+    @Test
+    void desertBuildingsSitOnZoneSurface() {
+        CityLayoutPlan plan = CityLayoutPlanner.planDesert(7L, 0, 0, 63);
+
+        assertEquals(plan.zone().targetHeight(), plan.baseY());
+        for (var slot : plan.slots()) {
+            assertEquals(plan.zone().targetHeight(), slot.position().getY(),
+                    "Desert building must be on the flattened city surface: " + slot.position());
+        }
     }
 }
