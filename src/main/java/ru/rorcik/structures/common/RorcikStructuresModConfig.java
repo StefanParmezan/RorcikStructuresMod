@@ -158,7 +158,7 @@ public class RorcikStructuresModConfig {
         MIN_STRUCTURES_PER_TICK = BUILDER.comment("Minimum structures per tick (adaptive floor)").defineInRange("minStructuresPerTick", 2, 1, 64);
         MAX_STRUCTURES_PER_TICK = BUILDER.comment("Maximum structures per tick (adaptive ceiling)").defineInRange("maxStructuresPerTick", 64, 8, 512);
         TARGET_TICK_TIME_MS = BUILDER.comment("Target tick time in ms for adaptive scheduler").defineInRange("targetTickTimeMs", 30L, 10L, 100L);
-        CHUNKS_PER_TICK = BUILDER.comment("How many chunks to force-load per tick during generation").defineInRange("chunksPerTick", 48, 4, 256);
+        CHUNKS_PER_TICK = BUILDER.comment("How many new city chunks may be force-loaded (ticketed) per tick during generation").defineInRange("chunksPerTick", 8, 1, 64);
         PRELOAD_PER_TICK_DURING_CHUNKS = BUILDER.comment("Templates to preload per tick while chunks are loading").defineInRange("preloadPerTickDuringChunks", 6, 1, 64);
         PRELOAD_PER_TICK_BEFORE_BUILD = BUILDER.comment("Templates to preload per tick before building phase").defineInRange("preloadPerTickBeforeBuild", 15, 1, 128);
         BUILDER.pop();

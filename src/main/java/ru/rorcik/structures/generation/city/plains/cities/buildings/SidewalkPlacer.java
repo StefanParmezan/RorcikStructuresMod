@@ -87,6 +87,10 @@ public class SidewalkPlacer {
                 sidewalkPos, sidewalkRotation, size.getX(), size.getZ()
         );
 
+        if (!level.hasChunkAt(sidewalkPos)) {
+            return;
+        }
+
         if (cityChunks != null && !isInsideCity(cityChunks, compensated, sidewalkRotation, size)) {
             if (RorcikStructuresModConfig.enableLogging) {
                 LOGGER.debug("Debug: [SIDEWALK] Skipping sidewalk outside city at {}", compensated.toShortString());
@@ -101,7 +105,7 @@ public class SidewalkPlacer {
         }
     }
 
-    private static BlockPos calculateSidewalkPosition(BlockPos slotPos, Direction roadSide) {
+    public static BlockPos calculateSidewalkPosition(BlockPos slotPos, Direction roadSide) {
         return switch (roadSide) {
             case SOUTH -> slotPos.offset(61, -1, 0);
             case NORTH -> slotPos.offset(-61, -1, 0);

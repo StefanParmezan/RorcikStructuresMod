@@ -2,12 +2,16 @@ package ru.rorcik.structures.generation.city.plains.cities.scheduler;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.TicketType;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.chunk.ChunkStatus;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.server.ServerLifecycleHooks;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
+import ru.rorcik.structures.common.RorcikStructuresMod;
 import ru.rorcik.structures.common.RorcikStructuresModConfig;
 import ru.rorcik.structures.data.StructureCache;
 import ru.rorcik.structures.data.city.plains.containers.BuildingSlot;
@@ -18,13 +22,16 @@ import ru.rorcik.structures.generation.city.plains.cities.buildings.SidewalkPlac
 import ru.rorcik.structures.planning.CityZonePlanner;
 
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+@Mod.EventBusSubscriber(modid = RorcikStructuresMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class CityBuildScheduler {
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static ExecutorService dispatcherPool;
+    private static final TicketType<ChunkPos> CITY_CHUNK_TICKET = TicketType.create(
+            "rorcik_city", Comparator.comparingLong(ChunkPos::toLong)
+    );
     private static PriorityTaskQueue taskQueue;
     private static final AtomicBoolean active = new AtomicBoolean(false);
     private static final AtomicInteger totalTasksSubmitted = new AtomicInteger(0);
@@ -32,35 +39,143 @@ public class CityBuildScheduler {
     private static final Map<String, CityJournal> ACTIVE_JOURNALS = new ConcurrentHashMap<>();
     private static final Map<String, Set<Long>> CITY_CHUNKS = new ConcurrentHashMap<>();
 
-    private static final int MAX_CHUNK_RETRIES = 15;
     private static final int MAX_EXECUTION_RETRIES = 3;
+    private static final int MAX_TICKETED_TASKS = 2;
+    private static final Map<Long, Integer> CHUNK_TICKET_REFS = new HashMap<>();
+    private static int tasksWithTickets = 0;
 
     public static synchronized void initialize() {
-        if (dispatcherPool != null) return;
-        dispatcherPool = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "CityDispatcher");
-            t.setDaemon(true);
-            return t;
-        });
+        if (taskQueue != null) return;
         taskQueue = new PriorityTaskQueue(GeneratorConfig.MAX_PENDING_TASKS);
         active.set(true);
+        if (RorcikStructuresModConfig.enableLogging) {
+            LOGGER.info("Info: [SCHEDULER] Tick-driven scheduler initialized");
+        }
+    }
 
-        dispatcherPool.submit(() -> {
-            if (RorcikStructuresModConfig.enableLogging) {
-                LOGGER.info("Info: [SCHEDULER] Dispatcher started");
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        if (!active.get() || taskQueue == null) return;
+        drainTasks();
+    }
+
+    private static void drainTasks() {
+        net.minecraft.server.MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null) return;
+        ServerLevel level = server.overworld();
+        if (level == null) return;
+
+        int maxTasks = Math.max(1, GeneratorConfig.MAX_STRUCTURES_PER_TICK);
+        long start = System.nanoTime();
+        long deadline = start + GeneratorConfig.TARGET_TICK_TIME_MS * 1_000_000L;
+        int[] ticketBudget = {Math.max(1, GeneratorConfig.CHUNKS_PER_TICK)};
+        List<AnchorChunkTask> deferred = new ArrayList<>();
+        int processed = 0;
+        int examined = 0;
+
+        while (processed < maxTasks && examined < maxTasks && System.nanoTime() < deadline) {
+            AnchorChunkTask task = taskQueue.poll();
+            if (task == null) break;
+            examined++;
+
+            boolean mayRequestTickets = !task.ticketedChunks().isEmpty()
+                    || tasksWithTickets < MAX_TICKETED_TASKS;
+            if (!ensureChunksReady(level, task, ticketBudget, mayRequestTickets)) {
+                deferred.add(task);
+                continue;
             }
-            while (active.get()) {
-                try {
-                    AnchorChunkTask task = taskQueue.poll();
-                    if (task == null) {
-                        continue;
-                    }
-                    processTask(task);
-                } catch (Exception e) {
-                    LOGGER.error("Error: [SCHEDULER] Dispatcher error", e);
+
+            task.setState(AnchorChunkTask.State.IN_PROGRESS);
+            precompileTemplates(task);
+            executeTaskOnMainThread(task, level);
+            processed++;
+        }
+
+        for (AnchorChunkTask task : deferred) {
+            taskQueue.offer(task);
+        }
+
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
+        if (RorcikStructuresModConfig.enableLogging
+                && elapsedMs > GeneratorConfig.TARGET_TICK_TIME_MS * 2) {
+            LOGGER.info("Info: [SCHEDULER] Tick spent {} ms on {} tasks ({} examined, {} deferred)",
+                    elapsedMs, processed, examined, deferred.size());
+        }
+    }
+
+    private static void precompileTemplates(AnchorChunkTask task) {
+        Set<net.minecraft.resources.ResourceLocation> allTemplates = new HashSet<>();
+        for (SlotWork sw : task.slotWorks()) {
+            for (Phase phase : sw.phases()) {
+                allTemplates.addAll(phase.templatesToPreload());
+            }
+        }
+        for (net.minecraft.resources.ResourceLocation loc : allTemplates) {
+            StructureCache.precompile(loc);
+        }
+    }
+
+    private static boolean ensureChunksReady(ServerLevel level, AnchorChunkTask task,
+                                             int[] ticketBudget, boolean mayRequestTickets) {
+        boolean ready = true;
+        for (long key : task.requiredChunks()) {
+            int chunkX = (int) (key >> 32);
+            int chunkZ = (int) key;
+
+            if (isChunkReady(level, chunkX, chunkZ)) continue;
+
+            ready = false;
+            if (mayRequestTickets && ticketBudget[0] > 0 && task.addTicketedChunk(chunkX, chunkZ)) {
+                if (task.ticketedChunks().size() == 1) {
+                    tasksWithTickets++;
                 }
+                acquireChunkTicket(level, key);
+                ticketBudget[0]--;
             }
-        });
+        }
+        return ready;
+    }
+
+    private static void acquireChunkTicket(ServerLevel level, long chunkKey) {
+        int refs = CHUNK_TICKET_REFS.getOrDefault(chunkKey, 0);
+        CHUNK_TICKET_REFS.put(chunkKey, refs + 1);
+        if (refs == 0) {
+            int chunkX = (int) (chunkKey >> 32);
+            int chunkZ = (int) chunkKey;
+            ChunkPos pos = new ChunkPos(chunkX, chunkZ);
+            level.getChunkSource().addRegionTicket(CITY_CHUNK_TICKET, pos, 0, pos);
+        }
+    }
+
+    private static void releaseChunkTicket(ServerLevel level, long chunkKey) {
+        Integer refs = CHUNK_TICKET_REFS.get(chunkKey);
+        if (refs == null) return;
+
+        if (refs <= 1) {
+            CHUNK_TICKET_REFS.remove(chunkKey);
+            int chunkX = (int) (chunkKey >> 32);
+            int chunkZ = (int) chunkKey;
+            ChunkPos pos = new ChunkPos(chunkX, chunkZ);
+            level.getChunkSource().removeRegionTicket(CITY_CHUNK_TICKET, pos, 0, pos);
+        } else {
+            CHUNK_TICKET_REFS.put(chunkKey, refs - 1);
+        }
+    }
+
+    private static boolean isChunkReady(ServerLevel level, int chunkX, int chunkZ) {
+        // getChunkNow never waits for generation, unlike getChunk(FULL, false).
+        return level.getChunkSource().getChunkNow(chunkX, chunkZ) != null;
+    }
+
+    private static void releaseChunkTickets(ServerLevel level, AnchorChunkTask task) {
+        if (task.ticketedChunks().isEmpty()) return;
+
+        for (long key : task.ticketedChunks()) {
+            releaseChunkTicket(level, key);
+        }
+        task.clearTicketedChunks();
+        tasksWithTickets = Math.max(0, tasksWithTickets - 1);
     }
 
     public static boolean startCityGeneration(PlayerProximityTracker.CityInfo city, ServerLevel level,
@@ -177,84 +292,9 @@ public class CityBuildScheduler {
         if (taskQueue != null) taskQueue.updatePriorities(playerBlockX, playerBlockZ);
     }
 
-    private static void processTask(AnchorChunkTask task) {
-        net.minecraft.server.MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        if (server == null) return;
-        ServerLevel level = server.overworld();
-        if (level == null) return;
-
-        if (!areChunksFullyGenerated(level, task)) {
-            int retries = task.incrementRetryCount();
-
-            if (retries > MAX_CHUNK_RETRIES) {
-                if (RorcikStructuresModConfig.enableLogging) {
-                    LOGGER.info("Info: [SCHEDULER] Deferring task {} to journal (chunks not loading). Will retry later.", task);
-                }
-                CityJournal journal = ACTIVE_JOURNALS.get(task.cityId());
-                if (journal != null) {
-                    for (SlotWork slotWork : task.slotWorks()) {
-                        String slotKey = slotWork.slotId();
-                        String[] parts = slotKey.split(":");
-                        if (parts.length == 2) {
-                            String[] anchorParts = parts[0].split(",");
-                            String[] posParts = parts[1].split(",");
-                            if (anchorParts.length == 2 && posParts.length == 3) {
-                                int anchorChunkX = Integer.parseInt(anchorParts[0]);
-                                int anchorChunkZ = Integer.parseInt(anchorParts[1]);
-                                int posX = Integer.parseInt(posParts[0]);
-                                int posY = Integer.parseInt(posParts[1]);
-                                int posZ = Integer.parseInt(posParts[2]);
-                                if ("BUILDING".equals(slotWork.slotType())) {
-                                    journal.markSlotDeferred(anchorChunkX, anchorChunkZ, posX, posY, posZ);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                task.resetRetryCount();
-                taskQueue.offer(task);
-                return;
-            }
-
-            taskQueue.offer(task);
-            return;
-        }
-
-        task.resetRetryCount();
-        task.setState(AnchorChunkTask.State.IN_PROGRESS);
-
-        Set<net.minecraft.resources.ResourceLocation> allTemplates = new HashSet<>();
-        for (SlotWork sw : task.slotWorks()) {
-            for (Phase phase : sw.phases()) {
-                allTemplates.addAll(phase.templatesToPreload());
-            }
-        }
-        for (net.minecraft.resources.ResourceLocation loc : allTemplates) {
-            StructureCache.precompile(loc);
-        }
-
-        level.getServer().execute(() -> executeTaskOnMainThread(task, level));
-    }
-
-    private static boolean areChunksFullyGenerated(ServerLevel level, AnchorChunkTask task) {
-        int anchorCX = task.anchorChunkX();
-        int anchorCZ = task.anchorChunkZ();
-        for (int dx = 0; dx < 4; dx++) {
-            for (int dz = 0; dz < 4; dz++) {
-                int chunkX = anchorCX + dx;
-                int chunkZ = anchorCZ + dz;
-                ChunkAccess chunk = level.getChunk(chunkX, chunkZ, ChunkStatus.FULL, true);
-                if (chunk == null || !chunk.getStatus().isOrAfter(ChunkStatus.FULL)) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
     private static void executeTaskOnMainThread(AnchorChunkTask task, ServerLevel level) {
         try {
+            task.resetRetryCount();
             Map<PhaseType, List<Runnable>> phasedActions = new TreeMap<>(Comparator.comparing(PhaseType::order));
             for (SlotWork slotWork : task.slotWorks()) {
                 for (Phase phase : slotWork.phases()) {
@@ -300,7 +340,7 @@ public class CityBuildScheduler {
                 }
             }
 
-            repairSidewalksForTask(level, task);
+            releaseChunkTickets(level, task);
 
             if (RorcikStructuresModConfig.enableLogging) {
                 LOGGER.info("Success: [SCHEDULER] Completed task {} (Phases: {}/{})",
@@ -320,6 +360,7 @@ public class CityBuildScheduler {
                 LOGGER.error("Error: [SCHEDULER] Task {} FAILED permanently after {} attempts. Marking slots as FAILED in journal. Reason: {}",
                         task, MAX_EXECUTION_RETRIES, e.getMessage(), e);
                 task.setState(AnchorChunkTask.State.FAILED);
+                releaseChunkTickets(level, task);
 
                 CityJournal journal = ACTIVE_JOURNALS.get(task.cityId());
                 if (journal != null) {
@@ -365,6 +406,9 @@ public class CityBuildScheduler {
     }
 
     private static void finalizeCity(ServerLevel level, CityJournal journal, int centerX, int centerZ) {
+        Set<Long> cityChunks = CITY_CHUNKS.get("city@" + centerX + "," + centerZ);
+        repairAllSidewalks(level, journal, cityChunks);
+
         journal.markCityCompleted();
         journal.delete();
         ACTIVE_JOURNALS.remove("city@" + centerX + "," + centerZ);
@@ -378,35 +422,17 @@ public class CityBuildScheduler {
         }
     }
 
-    private static void repairSidewalksForTask(ServerLevel level, AnchorChunkTask task) {
-        boolean hasHousePhase = false;
-        for (SlotWork slotWork : task.slotWorks()) {
-            for (Phase phase : slotWork.phases()) {
-                if (phase.type() == PhaseType.HOUSE_SHELL) {
-                    hasHousePhase = true;
-                    break;
-                }
-            }
-            if (hasHousePhase) break;
-        }
-        if (!hasHousePhase) return;
-
-        CityJournal journal = ACTIVE_JOURNALS.get(task.cityId());
-        if (journal == null) return;
-
-        Set<Long> cityChunks = CITY_CHUNKS.get(task.cityId());
+    /**
+     * Sidewalks are placed together with their house, but later buildings and
+     * roads can overwrite them. Instead of re-placing sidewalks after every
+     * anchor task (which rewrote the same blocks many times), do one repair
+     * pass when the whole city is finished.
+     */
+    private static void repairAllSidewalks(ServerLevel level, CityJournal journal, Set<Long> cityChunks) {
         if (cityChunks == null) return;
-
-        int minX = task.anchorBlockX();
-        int maxX = minX + 63;
-        int minZ = task.anchorBlockZ();
-        int maxZ = minZ + 63;
-        int margin = 96;
 
         for (CityJournal.SlotData slotData : journal.getAllSlots()) {
             if (!"houses".equals(slotData.category) || !slotData.isCompleted() || !slotData.isHousePlaced()) continue;
-            if (slotData.positionX < minX - margin || slotData.positionX > maxX + margin) continue;
-            if (slotData.positionZ < minZ - margin || slotData.positionZ > maxZ + margin) continue;
 
             BuildingSlot slot = slotData.toBuildingSlot();
             try {
@@ -421,12 +447,15 @@ public class CityBuildScheduler {
 
     public static boolean pauseCityGeneration(PlayerProximityTracker.CityInfo city, ServerLevel level) {
         if (taskQueue == null) return false;
-        int removed = taskQueue.removeTasksForCity(city.centerX, city.centerZ);
+        List<AnchorChunkTask> removed = taskQueue.removeTasksForCity(city.centerX, city.centerZ);
+        for (AnchorChunkTask task : removed) {
+            releaseChunkTickets(level, task);
+        }
         ACTIVE_JOURNALS.remove("city@" + city.centerX + "," + city.centerZ);
         CITY_CHUNKS.remove("city@" + city.centerX + "," + city.centerZ);
         if (RorcikStructuresModConfig.enableLogging) {
             LOGGER.info("Info: [SCHEDULER] Paused city '{}' — removed {} pending tasks from queue. Progress saved in journal.",
-                    city.cityId, removed);
+                    city.cityId, removed.size());
         }
         return true;
     }
@@ -457,14 +486,29 @@ public class CityBuildScheduler {
 
     public static synchronized void shutdown() {
         active.set(false);
-        if (dispatcherPool != null) {
-            dispatcherPool.shutdown();
-            dispatcherPool = null;
-        }
+
+        net.minecraft.server.MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        ServerLevel level = server != null ? server.overworld() : null;
         if (taskQueue != null) {
+            if (level != null) {
+                AnchorChunkTask task;
+                while ((task = taskQueue.poll()) != null) {
+                    releaseChunkTickets(level, task);
+                }
+            }
             taskQueue.clear();
             taskQueue = null;
         }
+        if (level != null) {
+            for (long key : new ArrayList<>(CHUNK_TICKET_REFS.keySet())) {
+                int chunkX = (int) (key >> 32);
+                int chunkZ = (int) key;
+                ChunkPos pos = new ChunkPos(chunkX, chunkZ);
+                level.getChunkSource().removeRegionTicket(CITY_CHUNK_TICKET, pos, 0, pos);
+            }
+        }
+        CHUNK_TICKET_REFS.clear();
+        tasksWithTickets = 0;
         ACTIVE_JOURNALS.clear();
         CITY_CHUNKS.clear();
     }

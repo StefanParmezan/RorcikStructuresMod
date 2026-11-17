@@ -120,7 +120,7 @@ public class ParkPlacer {
         return candidates.get(random.nextInt(candidates.size()));
     }
 
-    private static BlockPos calculatePlacementOrigin(BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
+    public static BlockPos calculatePlacementOrigin(BlockPos roadPos, Direction side, ParkConfig park, Rotation rotation) {
         
         BlockPos startPos = roadPos.relative(side, GeneratorConfig.BUILDING_DISTANCE);
         Set<BlockPos> slots = calculateSlots(startPos, side, park, rotation);
@@ -178,7 +178,7 @@ public class ParkPlacer {
         return available.get(random.nextInt(available.size()));
     }
 
-    private static boolean isRotated90(Rotation rotation) {
+    public static boolean isRotated90(Rotation rotation) {
         return rotation == Rotation.CLOCKWISE_90 || rotation == Rotation.COUNTERCLOCKWISE_90;
     }
 
@@ -192,7 +192,7 @@ public class ParkPlacer {
         return new BlockPos(minX, y, minZ);
     }
 
-    private static int[] getParkBaseSize(ParkConfig park) {
+    public static int[] getParkBaseSize(ParkConfig park) {
         if (!StructureCache.isInitialized()) {
             return new int[]{park.size()[0], park.size()[2]};
         }

@@ -60,7 +60,7 @@ public class PhaseBuilder {
         String slotId = anchorChunkX + "," + anchorChunkZ + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
         List<Phase> phases = new ArrayList<>();
         phases.add(new Phase(PhaseType.ROAD, () -> placeRoadForNode(node, pos), collectRoadTemplatesForNode(node)));
-        return new SlotWork(slotId, "ROAD_NODE", phases);
+        return new SlotWork(slotId, "ROAD_NODE", phases, roadFootprints(node, pos));
     }
 
     public SlotWork buildForStraightRoad(BlockPos pos, int anchorChunkSize) {
@@ -70,7 +70,18 @@ public class PhaseBuilder {
         String slotId = anchorChunkX + "," + anchorChunkZ + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
         List<Phase> phases = new ArrayList<>();
         phases.add(new Phase(PhaseType.ROAD, () -> placeStraightRoad(pos), collectStraightRoadTemplates()));
-        return new SlotWork(slotId, "STRAIGHT_ROAD", phases);
+        Rotation rotation = SlotFootprintCalculator.straightRoadRotation(detectRoadDirection(pos));
+        return new SlotWork(slotId, "STRAIGHT_ROAD", phases,
+                SlotFootprintCalculator.forRoad(pos, "s", rotation));
+    }
+
+    private static List<SlotWork.Footprint> roadFootprints(RoadNode node, BlockPos pos) {
+        List<Direction> connections = node.getAllConnections();
+        if (connections.isEmpty()) return List.of();
+
+        RoadConfigLoader.RoadMapEntry entry = RoadConfigLoader.findRoadForConnections(connections);
+        if (entry == null) return List.of();
+        return SlotFootprintCalculator.forRoad(pos, entry.type(), entry.rotation());
     }
 
     public SlotWork buildForBuildingSlot(BuildingSlot slot, int anchorChunkSize) {
@@ -112,7 +123,7 @@ public class PhaseBuilder {
                     () -> BuildingPlacer.placeBuilding(level, slot),
                     BuildingGenerator.collectRequiredBuildTemplates(List.of(slot))));
         }
-        return new SlotWork(slotId, "BUILDING", phases);
+        return new SlotWork(slotId, "BUILDING", phases, SlotFootprintCalculator.forBuildingSlot(slot));
     }
 
     private void placeRoadForNode(RoadNode node, BlockPos pos) {
