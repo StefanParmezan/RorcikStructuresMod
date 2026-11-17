@@ -69,6 +69,9 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.BooleanValue ENABLE_ROAD_DECORATIONS;
     public static final ForgeConfigSpec.BooleanValue ENABLE_CITY_COORDS;
 
+    public static final ForgeConfigSpec.IntValue RANDOM_PLAINS_SPAWN_CHANCE;
+    public static final ForgeConfigSpec.IntValue RANDOM_DESERT_SPAWN_CHANCE;
+
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> PLAINS_CITY_COORDS;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> DESERT_CITY_COORDS;
 
@@ -125,6 +128,9 @@ public class RorcikStructuresModConfig {
 
     public static boolean enableRoadDecorations;
     public static boolean enableCityCords;
+
+    public static int randomPlainsSpawnChance;
+    public static int randomDesertSpawnChance;
 
     public static List<String> plainsCityCoords;
     public static List<String> desertCityCoords;
@@ -190,6 +196,18 @@ public class RorcikStructuresModConfig {
         ABANDON_DISTANCE = BUILDER.comment("Distance in blocks at which city generation pauses").defineInRange("abandonDistance", 192, 64, 1024);
         MAX_PENDING_TASKS = BUILDER.comment("Maximum number of anchor chunk tasks in queue").defineInRange("maxPendingTasks", 512, 16, 4096);
         PROXIMITY_CHECK_INTERVAL_TICKS = BUILDER.comment("How often (in ticks) to check player position").defineInRange("proximityCheckIntervalTicks", 10, 1, 100);
+        BUILDER.pop();
+
+        BUILDER.comment("Random city generation").push("random_cities");
+        RANDOM_PLAINS_SPAWN_CHANCE = BUILDER.comment(
+                "Chance (%) that an available random plains city site actually spawns a city.",
+                "100 = every site, which is the maximum density allowed by the 5000 block center distance.",
+                "Lower values create fewer, but still randomly placed, cities."
+        ).defineInRange("plainsSpawnChance", 100, 0, 100);
+        RANDOM_DESERT_SPAWN_CHANCE = BUILDER.comment(
+                "Chance (%) that an available random desert city site actually spawns a city.",
+                "100 = every site, which is the maximum density allowed by the 1500 block center distance."
+        ).defineInRange("desertSpawnChance", 100, 0, 100);
         BUILDER.pop();
 
         BUILDER.comment("City Spawn Coordinates").push("spawn_coordinates");
@@ -270,6 +288,8 @@ public class RorcikStructuresModConfig {
 
         enableRoadDecorations = ENABLE_ROAD_DECORATIONS.get();
         enableCityCords = ENABLE_CITY_COORDS.get();
+        randomPlainsSpawnChance = RANDOM_PLAINS_SPAWN_CHANCE.get();
+        randomDesertSpawnChance = RANDOM_DESERT_SPAWN_CHANCE.get();
         workerPoolSize = WORKER_POOL_SIZE.get();
         bufferDistance = BUFFER_DISTANCE.get();
         abandonDistance = ABANDON_DISTANCE.get();

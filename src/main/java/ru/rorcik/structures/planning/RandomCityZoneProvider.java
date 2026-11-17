@@ -32,9 +32,14 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
     }
 
     public RandomCityZoneProvider(long seed, int seaLevel, CityCandidateValidator candidateValidator) {
+        this(seed, seaLevel, candidateValidator, CitySpawnSettings.DEFAULT);
+    }
+
+    public RandomCityZoneProvider(long seed, int seaLevel, CityCandidateValidator candidateValidator,
+                                  CitySpawnSettings spawnSettings) {
         this.seed = seed;
         this.seaLevel = seaLevel;
-        this.candidateLocator = new CityCandidateLocator(seed);
+        this.candidateLocator = new CityCandidateLocator(seed, spawnSettings);
         this.candidateValidator = candidateValidator;
     }
 
@@ -154,35 +159,59 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
             CityCandidate candidate = new CityCandidate(raw.centerX(), raw.centerZ(), type, raw.rank());
             TypedKey key = new TypedKey(type, candidate.centerX(), candidate.centerZ());
             typed.merge(key, candidate, (first, second) ->
-                    comparePriority(first, second) <= 0 ? first : second);
+                    CityCandidate.comparePriority(first, second) <= 0 ? first : second);
         }
 
         List<CityCandidate> resolved = new ArrayList<>();
+        Map<Long, List<CityCandidate>> buckets = new HashMap<>();
         for (CityCandidate candidate : typed.values()) {
             if (Math.abs(candidate.centerX() - blockX) > clampedRadius) continue;
             if (Math.abs(candidate.centerZ() - blockZ) > clampedRadius) continue;
-            if (!hasConflict(candidate, typed.values())) {
+            buckets.computeIfAbsent(conflictBucketKey(candidate.centerX(), candidate.centerZ()), ignored -> new ArrayList<>())
+                    .add(candidate);        }
+        for (CityCandidate candidate : typed.values()) {
+            if (Math.abs(candidate.centerX() - blockX) > clampedRadius) continue;
+            if (Math.abs(candidate.centerZ() - blockZ) > clampedRadius) continue;
+            if (!hasConflict(candidate, buckets)) {
                 resolved.add(candidate);
             }
         }
-        resolved.sort((first, second) -> comparePriority(first, second));
+        resolved.sort(CityCandidate::comparePriority);
         return resolved;
     }
 
-    private static boolean hasConflict(CityCandidate candidate, Iterable<CityCandidate> others) {
-        for (CityCandidate other : others) {
-            if (other.equals(candidate)) continue;
+    private static boolean hasConflict(CityCandidate candidate, Map<Long, List<CityCandidate>> buckets) {
+        int bucketX = Math.floorDiv(candidate.centerX(), MAX_MIN_DISTANCE);
+        int bucketZ = Math.floorDiv(candidate.centerZ(), MAX_MIN_DISTANCE);
 
-            int requiredDistance = Math.max(candidate.minDistance(), other.minDistance());
-            long dx = (long) candidate.centerX() - other.centerX();
-            long dz = (long) candidate.centerZ() - other.centerZ();
-            if (dx * dx + dz * dz >= (long) requiredDistance * requiredDistance) continue;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                List<CityCandidate> bucket = buckets.get(bucketKey(bucketX + dx, bucketZ + dz));
+                if (bucket == null) continue;
 
-            if (comparePriority(other, candidate) < 0) {
-                return true;
+                for (CityCandidate other : bucket) {
+                    if (other.equals(candidate)) continue;
+
+                    int requiredDistance = Math.max(candidate.minDistance(), other.minDistance());
+                    long ddx = (long) candidate.centerX() - other.centerX();
+                    long ddz = (long) candidate.centerZ() - other.centerZ();
+                    if (ddx * ddx + ddz * ddz >= (long) requiredDistance * requiredDistance) continue;
+
+                    if (CityCandidate.comparePriority(other, candidate) < 0) {
+                        return true;
+                    }
+                }
             }
         }
         return false;
+    }
+
+    private static long conflictBucketKey(int centerX, int centerZ) {
+        return bucketKey(Math.floorDiv(centerX, MAX_MIN_DISTANCE), Math.floorDiv(centerZ, MAX_MIN_DISTANCE));
+    }
+
+    private static long bucketKey(int bucketX, int bucketZ) {
+        return ((long) bucketX << 32) ^ (bucketZ & 0xFFFFFFFFL);
     }
 
     private CityType resolveType(CityCandidate candidate) {
@@ -210,16 +239,6 @@ public final class RandomCityZoneProvider implements CityZoneProvider {
             }
             return CityLayoutPlanner.planDesert(seed, candidate.centerX(), candidate.centerZ(), seaLevel);
         });
-    }
-
-    private static int comparePriority(CityCandidate first, CityCandidate second) {
-        int byRank = Long.compare(first.rank(), second.rank());
-        if (byRank != 0) return byRank;
-
-        int byX = Integer.compare(first.centerX(), second.centerX());
-        if (byX != 0) return byX;
-
-        return Integer.compare(first.centerZ(), second.centerZ());
     }
 
     private static PlanKey planKey(CityCandidate candidate) {

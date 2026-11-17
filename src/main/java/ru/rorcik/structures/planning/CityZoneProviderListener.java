@@ -25,13 +25,18 @@ public class CityZoneProviderListener {
         if (!level.dimension().equals(Level.OVERWORLD)) return;
 
         if (!RorcikStructuresModConfig.enableCityCords) {
+            CitySpawnSettings spawnSettings = new CitySpawnSettings(
+                    RorcikStructuresModConfig.randomPlainsSpawnChance,
+                    RorcikStructuresModConfig.randomDesertSpawnChance
+            );
             RandomCityZoneProvider randomProvider = new RandomCityZoneProvider(
-                    level.getSeed(), level.getSeaLevel(), CityCandidateValidator.forLevel(level)
+                    level.getSeed(), level.getSeaLevel(), CityCandidateValidator.forLevel(level), spawnSettings
             );
             currentProvider = randomProvider;
             CityZoneProviders.register(randomProvider);
             if (RorcikStructuresModConfig.enableLogging) {
-                LOGGER.info("Info: [CITY-ZONE] Registered random city zone provider for world {}", level.getSeed());
+                LOGGER.info("Info: [CITY-ZONE] Registered random city zone provider for world {} (plainsChance={}%, desertChance={}%)",
+                        level.getSeed(), spawnSettings.plainsChance(), spawnSettings.desertChance());
                 logNearestCandidate(level, randomProvider);
             }
         } else {

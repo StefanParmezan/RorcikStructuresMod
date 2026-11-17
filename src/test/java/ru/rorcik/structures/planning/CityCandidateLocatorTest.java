@@ -59,7 +59,9 @@ class CityCandidateLocatorTest {
 
     @Test
     void bothCityTypesArePresent() {
-        List<CityCandidate> candidates = new CityCandidateLocator(42L).candidatesNear(0, 0, 20000);
+        List<CityCandidate> candidates = new CityCandidateLocator(
+                42L, new CitySpawnSettings(50, 100)
+        ).candidatesNear(0, 0, 20000);
 
         assertTrue(candidates.stream().anyMatch(c -> c.type() == CityType.PLAINS));
         assertTrue(candidates.stream().anyMatch(c -> c.type() == CityType.DESERT));
@@ -85,5 +87,42 @@ class CityCandidateLocatorTest {
             assertEquals(0, candidate.centerZ());
         }
         assertFalse(candidates.size() > 1);
+    }
+
+    @Test
+    void zeroSpawnChanceProducesNoCandidates() {
+        CityCandidateLocator locator = new CityCandidateLocator(42L, new CitySpawnSettings(0, 0));
+
+        assertTrue(locator.candidatesNear(0, 0, 20000).isEmpty());
+    }
+
+    @Test
+    void lowerSpawnChanceProducesFewerCandidates() {
+        long fullPlains = countPlains(100);
+        long halfPlains = countPlains(50);
+
+        assertTrue(halfPlains > 0, "Half chance should still spawn plains cities");
+        assertTrue(halfPlains < fullPlains,
+                "Half chance should produce fewer plains cities than full chance");
+    }
+
+    @Test
+    void fullChanceIsDenserThanHalfChanceForEachType() {
+        long fullPlains = countPlains(100);
+        long fullDesert = new CityCandidateLocator(
+                42L, new CitySpawnSettings(0, 100)
+        ).candidatesNear(0, 0, 30000).stream()
+                .filter(c -> c.type() == CityType.DESERT)
+                .count();
+
+        assertTrue(fullPlains >= 50, "Expected a dense plains lattice, got " + fullPlains);
+        assertTrue(fullDesert >= 50, "Expected a dense desert lattice, got " + fullDesert);
+    }
+
+    private static long countPlains(int chance) {
+        return new CityCandidateLocator(42L, new CitySpawnSettings(chance, 0))
+                .candidatesNear(0, 0, 30000).stream()
+                .filter(c -> c.type() == CityType.PLAINS)
+                .count();
     }
 }
