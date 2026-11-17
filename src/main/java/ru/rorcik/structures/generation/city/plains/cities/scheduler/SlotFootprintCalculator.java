@@ -14,6 +14,7 @@ import ru.rorcik.structures.data.city.plains.containers.BuildingSlot;
 import ru.rorcik.structures.data.city.plains.containers.HouseConfig;
 import ru.rorcik.structures.data.city.plains.containers.ParkConfig;
 import ru.rorcik.structures.data.city.plains.containers.RoadConfig;
+import ru.rorcik.structures.data.city.plains.containers.RoadDecoration;
 import ru.rorcik.structures.generation.GeneratorConfig;
 import ru.rorcik.structures.generation.StructureUtils;
 import ru.rorcik.structures.generation.city.plains.cities.buildings.ParkPlacer;
@@ -30,8 +31,6 @@ import java.util.Optional;
  */
 public final class SlotFootprintCalculator {
 
-    private static final int SIDEWALK_FOOTPRINT = 32;
-
     private SlotFootprintCalculator() {
     }
 
@@ -47,11 +46,8 @@ public final class SlotFootprintCalculator {
                 addBox(footprints, houseOrigin, slot.rotation(), config.size()[0], config.size()[2]);
 
                 BlockPos sidewalkAnchor = SidewalkPlacer.calculateSidewalkPosition(slot.position(), slot.roadSide());
-                footprints.add(new SlotWork.Footprint(
-                        sidewalkAnchor.getX(), sidewalkAnchor.getZ(),
-                        sidewalkAnchor.getX() + SIDEWALK_FOOTPRINT - 1,
-                        sidewalkAnchor.getZ() + SIDEWALK_FOOTPRINT - 1
-                ));
+                Rotation sidewalkRotation = SidewalkPlacer.getSidewalkRotation(slot.roadSide());
+                addTemplateBox(footprints, ModPaths.sidewalkNbtPath("a"), sidewalkAnchor, sidewalkRotation);
             }
             case "parks" -> {
                 ParkConfig park = ParkConfigLoader.getPark(slot.buildingName());
@@ -102,11 +98,27 @@ public final class SlotFootprintCalculator {
         BlockPos roadOrigin = pos.offset(config.offset()[0], config.offset()[1], config.offset()[2]);
         List<SlotWork.Footprint> footprints = new ArrayList<>(1);
         addBox(footprints, roadOrigin, rotation, config.size()[0], config.size()[2]);
+
+        for (RoadDecoration decoration : config.decorations()) {
+            int[] rotatedOffset = StructureUtils.rotatePositionInStructure(
+                    decoration.offset()[0], decoration.offset()[1], decoration.offset()[2],
+                    rotation, config.size()[0], config.size()[2]
+            );
+            BlockPos decorPos = pos.offset(rotatedOffset[0], rotatedOffset[1], rotatedOffset[2]);
+            Rotation decorRotation = combineRotations(rotation, decoration.rotation());
+            addTemplateBox(footprints, ModPaths.roadDecorNbtPath("a"), decorPos, decorRotation);
+        }
+
         return footprints;
     }
 
     public static Rotation straightRoadRotation(Direction direction) {
         return direction == null ? Rotation.NONE : ru.rorcik.structures.generation.city.plains.cities.roads.RoadPlacer.directionToRotation(direction);
+    }
+
+    private static Rotation combineRotations(Rotation roadRotation, int decorRotationDegrees) {
+        int totalDegrees = (roadRotation.ordinal() * 90 + decorRotationDegrees) % 360;
+        return Rotation.values()[totalDegrees / 90];
     }
 
     private static void addTemplateBox(List<SlotWork.Footprint> footprints, String nbtPath,

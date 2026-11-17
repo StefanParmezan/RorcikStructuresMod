@@ -315,27 +315,18 @@ public class CityBuildScheduler {
             CityJournal journal = ACTIVE_JOURNALS.get(task.cityId());
             if (journal != null) {
                 for (SlotWork slotWork : task.slotWorks()) {
-                    String slotKey = slotWork.slotId();
-                    String slotType = slotWork.slotType();
-                    String[] parts = slotKey.split(":");
-                    if (parts.length == 2) {
-                        String[] anchorParts = parts[0].split(",");
-                        String[] posParts = parts[1].split(",");
-                        if (anchorParts.length == 2 && posParts.length == 3) {
-                            int anchorChunkX = Integer.parseInt(anchorParts[0]);
-                            int anchorChunkZ = Integer.parseInt(anchorParts[1]);
-                            int posX = Integer.parseInt(posParts[0]);
-                            int posY = Integer.parseInt(posParts[1]);
-                            int posZ = Integer.parseInt(posParts[2]);
+                    ParsedSlot slot = parseSlot(slotWork.slotId());
+                    if (slot == null) continue;
 
-                            if ("BUILDING".equals(slotType)) {
-                                journal.markSlotCompleted(anchorChunkX, anchorChunkZ, posX, posY, posZ);
-                            } else if ("ROAD_NODE".equals(slotType)) {
-                                journal.markRoadNodeCompleted(anchorChunkX, anchorChunkZ, posX, posY, posZ);
-                            } else if ("STRAIGHT_ROAD".equals(slotType)) {
-                                journal.markStraightRoadCompleted(anchorChunkX, anchorChunkZ, posX, posY, posZ);
-                            }
-                        }
+                    if ("BUILDING".equals(slotWork.slotType())) {
+                        journal.markSlotCompleted(slot.anchorChunkX, slot.anchorChunkZ,
+                                slot.category, slot.posX, slot.posY, slot.posZ);
+                    } else if ("ROAD_NODE".equals(slotWork.slotType())) {
+                        journal.markRoadNodeCompleted(slot.anchorChunkX, slot.anchorChunkZ,
+                                slot.posX, slot.posY, slot.posZ);
+                    } else if ("STRAIGHT_ROAD".equals(slotWork.slotType())) {
+                        journal.markStraightRoadCompleted(slot.anchorChunkX, slot.anchorChunkZ,
+                                slot.posX, slot.posY, slot.posZ);
                     }
                 }
             }
@@ -365,27 +356,49 @@ public class CityBuildScheduler {
                 CityJournal journal = ACTIVE_JOURNALS.get(task.cityId());
                 if (journal != null) {
                     for (SlotWork slotWork : task.slotWorks()) {
-                        String slotKey = slotWork.slotId();
-                        String slotType = slotWork.slotType();
-                        String[] parts = slotKey.split(":");
-                        if (parts.length == 2) {
-                            String[] anchorParts = parts[0].split(",");
-                            String[] posParts = parts[1].split(",");
-                            if (anchorParts.length == 2 && posParts.length == 3) {
-                                int anchorChunkX = Integer.parseInt(anchorParts[0]);
-                                int anchorChunkZ = Integer.parseInt(anchorParts[1]);
-                                int posX = Integer.parseInt(posParts[0]);
-                                int posY = Integer.parseInt(posParts[1]);
-                                int posZ = Integer.parseInt(posParts[2]);
-
-                                if ("BUILDING".equals(slotType)) {
-                                    journal.markSlotFailed(anchorChunkX, anchorChunkZ, posX, posY, posZ);
-                                }
-                            }
+                        ParsedSlot slot = parseSlot(slotWork.slotId());
+                        if (slot != null && "BUILDING".equals(slotWork.slotType())) {
+                            journal.markSlotFailed(slot.anchorChunkX, slot.anchorChunkZ,
+                                    slot.category, slot.posX, slot.posY, slot.posZ);
                         }
                     }
                 }
             }
+        }
+    }
+
+    private record ParsedSlot(int anchorChunkX, int anchorChunkZ, String category,
+                              int posX, int posY, int posZ) {
+    }
+
+    private static ParsedSlot parseSlot(String slotKey) {
+        String[] parts = slotKey.split(":");
+        String anchorPart;
+        String category = null;
+        String posPart;
+        if (parts.length == 3) {
+            anchorPart = parts[0];
+            category = parts[1];
+            posPart = parts[2];
+        } else if (parts.length == 2) {
+            anchorPart = parts[0];
+            posPart = parts[1];
+        } else {
+            return null;
+        }
+
+        String[] anchorParts = anchorPart.split(",");
+        String[] posParts = posPart.split(",");
+        if (anchorParts.length != 2 || posParts.length != 3) return null;
+
+        try {
+            return new ParsedSlot(
+                    Integer.parseInt(anchorParts[0]), Integer.parseInt(anchorParts[1]),
+                    category == null ? "houses" : category,
+                    Integer.parseInt(posParts[0]), Integer.parseInt(posParts[1]), Integer.parseInt(posParts[2])
+            );
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 

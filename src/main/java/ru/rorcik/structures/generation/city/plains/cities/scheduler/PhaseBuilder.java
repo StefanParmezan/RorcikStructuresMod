@@ -89,10 +89,11 @@ public class PhaseBuilder {
         int shift = Integer.numberOfTrailingZeros(anchorChunkSize);
         int anchorChunkX = (pos.getX() >> (4 + shift)) << shift;
         int anchorChunkZ = (pos.getZ() >> (4 + shift)) << shift;
-        String slotId = anchorChunkX + "," + anchorChunkZ + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
+        String category = slot.category();
+        String slotId = anchorChunkX + "," + anchorChunkZ + ":" + category + ":"
+                + pos.getX() + "," + pos.getY() + "," + pos.getZ();
 
         List<Phase> phases = new ArrayList<>();
-        String category = slot.category();
 
         if ("houses".equals(category)) {
             AtomicBoolean housePlaced = new AtomicBoolean(false);
@@ -100,7 +101,7 @@ public class PhaseBuilder {
                     () -> {
                         boolean placed = BuildingPlacer.placeBuildingShell(level, slot);
                         housePlaced.set(placed);
-                        journal.markHousePlaced(anchorChunkX, anchorChunkZ, pos.getX(), pos.getY(), pos.getZ(), placed);
+                        journal.markHousePlaced(anchorChunkX, anchorChunkZ, category, pos.getX(), pos.getY(), pos.getZ(), placed);
                     },
                     BuildingGenerator.collectRequiredBuildTemplates(List.of(slot))));
             phases.add(new Phase(PhaseType.INSTALL, () -> {}, Collections.emptySet()));
@@ -119,7 +120,8 @@ public class PhaseBuilder {
                     },
                     SidewalkPlacer.collectRequiredTemplates()));
         } else if ("desert".equals(category) || "parks".equals(category) || "platforms".equals(category) || "other".equals(category) || "lootable".equals(category)) {
-            phases.add(new Phase(PhaseType.INSTALL,
+            PhaseType phaseType = "platforms".equals(category) ? PhaseType.PLATFORM : PhaseType.INSTALL;
+            phases.add(new Phase(phaseType,
                     () -> BuildingPlacer.placeBuilding(level, slot),
                     BuildingGenerator.collectRequiredBuildTemplates(List.of(slot))));
         }

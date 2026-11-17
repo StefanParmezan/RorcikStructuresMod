@@ -125,7 +125,7 @@ public class SidewalkPlacer {
         };
     }
 
-    private static Rotation getSidewalkRotation(Direction roadSide) {
+    public static Rotation getSidewalkRotation(Direction roadSide) {
         return switch (roadSide) {
             case SOUTH, NORTH -> Rotation.NONE;
             case EAST, WEST   -> Rotation.CLOCKWISE_90;
