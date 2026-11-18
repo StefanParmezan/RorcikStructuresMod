@@ -37,6 +37,18 @@ public class BuildingSlotAllocator {
             RandomSource random,
             ParkWorldTracker tracker
     ) {
+        ParkAvailability parkAvailability = () ->
+                ParkPlacer.filterAvailableParks(level, ParkConfigLoader.getParks(), tracker);
+        return allocateSlots(parkAvailability, nodeMap, straightPositions, parkOccupiedSlots, random);
+    }
+
+    public static List<BuildingSlot> allocateSlots(
+            ParkAvailability parkAvailability,
+            Map<BlockPos, RoadNode> nodeMap,
+            Set<BlockPos> straightPositions,
+            Set<BlockPos> parkOccupiedSlots,
+            RandomSource random
+    ) {
         Map<BlockPos, BuildingSlot> occupiedSlots = new HashMap<>();
         List<BuildingSlot> slots = new ArrayList<>();
         Set<BlockPos> roadPositions = collectRoadPositions(nodeMap, straightPositions);
@@ -45,8 +57,8 @@ public class BuildingSlotAllocator {
             occupiedSlots.put(parkPos, null);
         }
 
-        allocateFromNodes(level, nodeMap, occupiedSlots, slots, random, roadPositions, tracker);
-        allocateFromStraights(level, nodeMap, straightPositions, occupiedSlots, slots, random, roadPositions, tracker);
+        allocateFromNodes(parkAvailability, nodeMap, occupiedSlots, slots, random, roadPositions);
+        allocateFromStraights(parkAvailability, nodeMap, straightPositions, occupiedSlots, slots, random, roadPositions);
 
         int layer1Count = slots.size();
         if (RorcikStructuresModConfig.enableLogging) {
@@ -56,7 +68,7 @@ public class BuildingSlotAllocator {
         List<BuildingSlot> currentLayer = new ArrayList<>(slots);
         for (int depth = 1; depth < GeneratorConfig.BUILDING_MAX_DEPTH; depth++) {
             int beforeCount = slots.size();
-            List<BuildingSlot> nextLayer = allocateNextLayer(currentLayer, occupiedSlots, slots, random, depth, roadPositions, tracker);
+            List<BuildingSlot> nextLayer = allocateNextLayer(currentLayer, occupiedSlots, slots, random, depth, roadPositions);
             int addedCount = slots.size() - beforeCount;
             if (RorcikStructuresModConfig.enableLogging) {
                 LOGGER.info("Info: [SLOTS] Layer {}: {} new slots added (total: {})",
@@ -66,8 +78,9 @@ public class BuildingSlotAllocator {
         }
 
         List<BuildingSlot> allBuildings = new ArrayList<>(slots);
-        allocatePlatforms(allBuildings, slots, occupiedSlots, roadPositions, parkOccupiedSlots);
-        allocatePlatformsAlongStraights(straightPositions, nodeMap, slots, occupiedSlots, roadPositions, parkOccupiedSlots);
+        Set<BlockPos> platformPositions = new HashSet<>();
+        allocatePlatforms(allBuildings, slots, occupiedSlots, roadPositions, parkOccupiedSlots, platformPositions);
+        allocatePlatformsAlongStraights(straightPositions, nodeMap, slots, occupiedSlots, roadPositions, parkOccupiedSlots, platformPositions);
 
         int platformCount = 0, parkCount = 0, buildingCount = 0;
         int squareParkCount = 0, rectParkCount = 0;
@@ -111,13 +124,12 @@ public class BuildingSlotAllocator {
     }
 
     private static void allocateFromNodes(
-            ServerLevel level,
+            ParkAvailability parkAvailability,
             Map<BlockPos, RoadNode> nodeMap,
             Map<BlockPos, BuildingSlot> occupiedSlots,
             List<BuildingSlot> slots,
             RandomSource random,
-            Set<BlockPos> roadPositions,
-            ParkWorldTracker tracker
+            Set<BlockPos> roadPositions
     ) {
         for (Map.Entry<BlockPos, RoadNode> entry : nodeMap.entrySet()) {
             RoadNode node = entry.getValue();
@@ -135,20 +147,19 @@ public class BuildingSlotAllocator {
                 if (side.getAxis().isVertical()) continue;
                 if (connections.contains(side)) continue;
                 if (side == deadEndExcludedSide) continue;
-                tryAllocateSlot(level, nodePos, side, occupiedSlots, slots, random, roadPositions, tracker);
+                tryAllocateSlot(parkAvailability, nodePos, side, occupiedSlots, slots, random, roadPositions);
             }
         }
     }
 
     private static void allocateFromStraights(
-            ServerLevel level,
+            ParkAvailability parkAvailability,
             Map<BlockPos, RoadNode> nodeMap,
             Set<BlockPos> straightPositions,
             Map<BlockPos, BuildingSlot> occupiedSlots,
             List<BuildingSlot> slots,
             RandomSource random,
-            Set<BlockPos> roadPositions,
-            ParkWorldTracker tracker
+            Set<BlockPos> roadPositions
     ) {
         for (BlockPos pos : straightPositions) {
             if (nodeMap.containsKey(pos)) continue;
@@ -156,8 +167,8 @@ public class BuildingSlotAllocator {
             if (roadDirection == null) continue;
             Direction left = roadDirection.getCounterClockWise();
             Direction right = roadDirection.getClockWise();
-            tryAllocateSlot(level, pos, left, occupiedSlots, slots, random, roadPositions, tracker);
-            tryAllocateSlot(level, pos, right, occupiedSlots, slots, random, roadPositions, tracker);
+            tryAllocateSlot(parkAvailability, pos, left, occupiedSlots, slots, random, roadPositions);
+            tryAllocateSlot(parkAvailability, pos, right, occupiedSlots, slots, random, roadPositions);
         }
     }
 
@@ -167,8 +178,7 @@ public class BuildingSlotAllocator {
             List<BuildingSlot> slots,
             RandomSource random,
             int currentDepth,
-            Set<BlockPos> roadPositions,
-            ParkWorldTracker tracker
+            Set<BlockPos> roadPositions
     ) {
         List<BuildingSlot> nextLayer = new ArrayList<>();
         int skippedPlatform = 0, skippedPark = 0, skippedMaxDepth = 0;
@@ -215,9 +225,10 @@ public class BuildingSlotAllocator {
             List<BuildingSlot> slots,
             Map<BlockPos, BuildingSlot> occupiedSlots,
             Set<BlockPos> roadPositions,
-            Set<BlockPos> parkOccupiedSlots
+            Set<BlockPos> parkOccupiedSlots,
+            Set<BlockPos> platformPositions
     ) {
-        int platformsAdded = 0, skippedByBuilding = 0, skippedByRoad = 0;
+        int platformsAdded = 0, skippedByRoad = 0;
         int skippedByPark = 0, skippedByPlatform = 0;
         BlockPos.MutableBlockPos mutPos = new BlockPos.MutableBlockPos();
 
@@ -230,33 +241,25 @@ public class BuildingSlotAllocator {
                 mutPos.set(building.position()).move(side, GeneratorConfig.BUILDING_DISTANCE);
                 BlockPos platformPos = mutPos.immutable();
 
-                if (occupiedSlots.containsKey(platformPos)) {
-                    BuildingSlot existing = occupiedSlots.get(platformPos);
-                    if (existing == null || existing.category().equals(PARKS_CATEGORY)) {
-                        skippedByPark++;
-                    } else if (existing.category().equals(PLATFORM_CATEGORY)) {
-                        skippedByPlatform++;
-                    } else {
-                        skippedByBuilding++;
-                    }
-                    continue;
-                }
+                // Platforms are ground-level overlap pieces: allow them to sit
+                // on top of building slots and other platforms. Only roads and
+                // parks keep their reserved ground.
                 if (roadPositions.contains(platformPos)) { skippedByRoad++; continue; }
                 if (parkOccupiedSlots.contains(platformPos)) { skippedByPark++; continue; }
+                if (!platformPositions.add(platformPos)) { skippedByPlatform++; continue; }
 
                 Rotation platformRotation = calculateOutwardRotation(side);
                 BuildingSlot platformSlot = new BuildingSlot(
                         platformPos, platformRotation, side, PLATFORM_CATEGORY, PLATFORM_NAME, 0
                 );
                 slots.add(platformSlot);
-                occupiedSlots.put(platformPos, platformSlot);
                 platformsAdded++;
             }
         }
 
         if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Info: [PLATFORMS-BUILDING] Added: {} | Skipped: building={}, road={}, park={}, platform={}",
-                    platformsAdded, skippedByBuilding, skippedByRoad, skippedByPark, skippedByPlatform);
+            LOGGER.info("Info: [PLATFORMS-BUILDING] Added: {} | Skipped: road={}, park={}, duplicate={}",
+                    platformsAdded, skippedByRoad, skippedByPark, skippedByPlatform);
         }
     }
 
@@ -266,7 +269,8 @@ public class BuildingSlotAllocator {
             List<BuildingSlot> slots,
             Map<BlockPos, BuildingSlot> occupiedSlots,
             Set<BlockPos> roadPositions,
-            Set<BlockPos> parkOccupiedSlots
+            Set<BlockPos> parkOccupiedSlots,
+            Set<BlockPos> platformPositions
     ) {
         int added = 0, skippedOccupied = 0, skippedRoad = 0, skippedPark = 0;
         BlockPos.MutableBlockPos mutPos = new BlockPos.MutableBlockPos();
@@ -282,22 +286,21 @@ public class BuildingSlotAllocator {
                 mutPos.set(pos).move(side, GeneratorConfig.BUILDING_DISTANCE);
                 BlockPos platformPos = mutPos.immutable();
 
-                if (occupiedSlots.containsKey(platformPos)) { skippedOccupied++; continue; }
                 if (roadPositions.contains(platformPos)) { skippedRoad++; continue; }
                 if (parkOccupiedSlots.contains(platformPos)) { skippedPark++; continue; }
+                if (!platformPositions.add(platformPos)) { skippedOccupied++; continue; }
 
                 Rotation platformRotation = calculateOutwardRotation(side);
                 BuildingSlot platformSlot = new BuildingSlot(
                         platformPos, platformRotation, side, PLATFORM_CATEGORY, PLATFORM_NAME, 0
                 );
                 slots.add(platformSlot);
-                occupiedSlots.put(platformPos, platformSlot);
                 added++;
             }
         }
 
         if (RorcikStructuresModConfig.enableLogging) {
-            LOGGER.info("Info: [PLATFORMS-STRAIGHT] Added: {} | Skipped: occupied={}, road={}, park={}",
+            LOGGER.info("Info: [PLATFORMS-STRAIGHT] Added: {} | Skipped: duplicate={}, road={}, park={}",
                     added, skippedOccupied, skippedRoad, skippedPark);
         }
     }
@@ -319,14 +322,13 @@ public class BuildingSlotAllocator {
     }
 
     private static void tryAllocateSlot(
-            ServerLevel level,
+            ParkAvailability parkAvailability,
             BlockPos nodePos,
             Direction side,
             Map<BlockPos, BuildingSlot> occupiedSlots,
             List<BuildingSlot> slots,
             RandomSource random,
-            Set<BlockPos> roadPositions,
-            ParkWorldTracker tracker
+            Set<BlockPos> roadPositions
     ) {
         BlockPos.MutableBlockPos mutPos = new BlockPos.MutableBlockPos();
         mutPos.set(nodePos).move(side, GeneratorConfig.BUILDING_DISTANCE);
@@ -337,7 +339,7 @@ public class BuildingSlotAllocator {
 
         String category = chooseCategory(random);
         if (category.equals(PARKS_CATEGORY) && GeneratorConfig.SPAWN_PARKS) {
-            if (tryAllocatePark(level, nodePos, side, buildingPos, occupiedSlots, slots, random, roadPositions, tracker)) {
+            if (tryAllocatePark(parkAvailability, nodePos, side, buildingPos, occupiedSlots, slots, random, roadPositions)) {
                 return;
             }
             category = "houses";
@@ -361,18 +363,16 @@ public class BuildingSlotAllocator {
     }
 
     private static boolean tryAllocatePark(
-            ServerLevel level,
+            ParkAvailability parkAvailability,
             BlockPos nodePos,
             Direction side,
             BlockPos buildingPos, 
             Map<BlockPos, BuildingSlot> occupiedSlots,
             List<BuildingSlot> slots,
             RandomSource random,
-            Set<BlockPos> roadPositions,
-            ParkWorldTracker tracker
+            Set<BlockPos> roadPositions
     ) {
-        List<ParkConfig> parks = ParkConfigLoader.getParks();
-        List<ParkConfig> availableParks = ParkPlacer.filterAvailableParks(level, parks, tracker);
+        List<ParkConfig> availableParks = parkAvailability.getAvailableParks();
         if (availableParks.isEmpty()) return false;
 
         int maxAttempts = 3;

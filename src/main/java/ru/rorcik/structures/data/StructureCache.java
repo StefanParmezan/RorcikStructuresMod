@@ -3,7 +3,9 @@ package ru.rorcik.structures.data;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.packs.resources.Resource;
@@ -247,7 +249,7 @@ public class StructureCache {
                 return;
             }
             try {
-                CompoundTag nbt = NbtIo.readCompressed(new java.io.ByteArrayInputStream(rawBytes));
+                CompoundTag nbt = stripAirBlocks(NbtIo.readCompressed(new java.io.ByteArrayInputStream(rawBytes)));
                 StructureTemplate template = new StructureTemplate();
                 template.load(blockGetter, nbt);
                 targetCache.put(location, template);
@@ -257,6 +259,39 @@ public class StructureCache {
         } finally {
             RW_LOCK.writeLock().unlock();
         }
+    }
+
+    /**
+     * City templates are stored as full box-sized structures, so most entries
+     * are air (a 64x64x64 house has ~236k air blocks out of 262k). Placing
+     * those air blocks clears terrain, platforms and neighbouring structures
+     * around the building and makes placement ~10x slower. Drop them before
+     * loading the template.
+     */
+    private static CompoundTag stripAirBlocks(CompoundTag nbt) {
+        ListTag palette = nbt.getList("palette", Tag.TAG_COMPOUND);
+        ListTag blocks = nbt.getList("blocks", Tag.TAG_COMPOUND);
+        if (palette.size() == 0 || blocks.size() == 0) return nbt;
+
+        ListTag filtered = new ListTag();
+        for (int i = 0; i < blocks.size(); i++) {
+            CompoundTag block = blocks.getCompound(i);
+            int state = block.getInt("state");
+            if (state < 0 || state >= palette.size()) continue;
+
+            String name = palette.getCompound(state).getString("Name");
+            if (isAirBlock(name)) continue;
+            filtered.add(block);
+        }
+        nbt.put("blocks", filtered);
+        return nbt;
+    }
+
+    private static boolean isAirBlock(String name) {
+        return "minecraft:air".equals(name)
+                || "minecraft:cave_air".equals(name)
+                || "minecraft:void_air".equals(name)
+                || "minecraft:structure_void".equals(name);
     }
 
     private static Optional<StructureTemplate> compileOnDemandInternal(ResourceLocation location, Category cat, Map<ResourceLocation, StructureTemplate> targetCache) {
@@ -269,7 +304,7 @@ public class StructureCache {
             return Optional.empty();
         }
         try {
-            CompoundTag nbt = NbtIo.readCompressed(new java.io.ByteArrayInputStream(rawBytes));
+            CompoundTag nbt = stripAirBlocks(NbtIo.readCompressed(new java.io.ByteArrayInputStream(rawBytes)));
             StructureTemplate template = new StructureTemplate();
             template.load(blockGetter, nbt);
             targetCache.put(location, template);

@@ -67,6 +67,10 @@ public class RorcikStructuresModConfig {
     public static final ForgeConfigSpec.IntValue PROXIMITY_CHECK_INTERVAL_TICKS;
 
     public static final ForgeConfigSpec.BooleanValue ENABLE_ROAD_DECORATIONS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_CITY_COORDS;
+
+    public static final ForgeConfigSpec.IntValue RANDOM_PLAINS_SPAWN_CHANCE;
+    public static final ForgeConfigSpec.IntValue RANDOM_DESERT_SPAWN_CHANCE;
 
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> PLAINS_CITY_COORDS;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> DESERT_CITY_COORDS;
@@ -123,6 +127,10 @@ public class RorcikStructuresModConfig {
     public static int proximityCheckIntervalTicks;
 
     public static boolean enableRoadDecorations;
+    public static boolean enableCityCords;
+
+    public static int randomPlainsSpawnChance;
+    public static int randomDesertSpawnChance;
 
     public static List<String> plainsCityCoords;
     public static List<String> desertCityCoords;
@@ -150,7 +158,7 @@ public class RorcikStructuresModConfig {
         MIN_STRUCTURES_PER_TICK = BUILDER.comment("Minimum structures per tick (adaptive floor)").defineInRange("minStructuresPerTick", 2, 1, 64);
         MAX_STRUCTURES_PER_TICK = BUILDER.comment("Maximum structures per tick (adaptive ceiling)").defineInRange("maxStructuresPerTick", 64, 8, 512);
         TARGET_TICK_TIME_MS = BUILDER.comment("Target tick time in ms for adaptive scheduler").defineInRange("targetTickTimeMs", 30L, 10L, 100L);
-        CHUNKS_PER_TICK = BUILDER.comment("How many chunks to force-load per tick during generation").defineInRange("chunksPerTick", 48, 4, 256);
+        CHUNKS_PER_TICK = BUILDER.comment("How many new city chunks may be force-loaded (ticketed) per tick during generation").defineInRange("chunksPerTick", 8, 1, 64);
         PRELOAD_PER_TICK_DURING_CHUNKS = BUILDER.comment("Templates to preload per tick while chunks are loading").defineInRange("preloadPerTickDuringChunks", 6, 1, 64);
         PRELOAD_PER_TICK_BEFORE_BUILD = BUILDER.comment("Templates to preload per tick before building phase").defineInRange("preloadPerTickBeforeBuild", 15, 1, 128);
         BUILDER.pop();
@@ -190,7 +198,24 @@ public class RorcikStructuresModConfig {
         PROXIMITY_CHECK_INTERVAL_TICKS = BUILDER.comment("How often (in ticks) to check player position").defineInRange("proximityCheckIntervalTicks", 10, 1, 100);
         BUILDER.pop();
 
+        BUILDER.comment("Random city generation").push("random_cities");
+        RANDOM_PLAINS_SPAWN_CHANCE = BUILDER.comment(
+                "Chance (%) that an available random plains city site actually spawns a city.",
+                "100 = every site, which is the maximum density allowed by the 5000 block center distance.",
+                "Lower values create fewer, but still randomly placed, cities."
+        ).defineInRange("plainsSpawnChance", 100, 0, 100);
+        RANDOM_DESERT_SPAWN_CHANCE = BUILDER.comment(
+                "Chance (%) that an available random desert city site actually spawns a city.",
+                "100 = every site, which is the maximum density allowed by the 1500 block center distance."
+        ).defineInRange("desertSpawnChance", 100, 0, 100);
+        BUILDER.pop();
+
         BUILDER.comment("City Spawn Coordinates").push("spawn_coordinates");
+        ENABLE_CITY_COORDS = BUILDER.comment(
+                "Use manual city coordinates from the lists below.",
+                "When false, cities are generated randomly across the world."
+        ).define("enableCityCords", true);
+
         PLAINS_CITY_COORDS = BUILDER.comment(
                 "List of coordinates for Plains cities in 'x,z' format.",
                 "Example: ['11000,0', '-11000,0']"
@@ -262,6 +287,9 @@ public class RorcikStructuresModConfig {
         desertYOffset = DESERT_Y_OFFSET.get();
 
         enableRoadDecorations = ENABLE_ROAD_DECORATIONS.get();
+        enableCityCords = ENABLE_CITY_COORDS.get();
+        randomPlainsSpawnChance = RANDOM_PLAINS_SPAWN_CHANCE.get();
+        randomDesertSpawnChance = RANDOM_DESERT_SPAWN_CHANCE.get();
         workerPoolSize = WORKER_POOL_SIZE.get();
         bufferDistance = BUFFER_DISTANCE.get();
         abandonDistance = ABANDON_DISTANCE.get();

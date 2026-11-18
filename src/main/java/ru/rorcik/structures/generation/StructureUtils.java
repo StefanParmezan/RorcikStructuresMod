@@ -51,15 +51,15 @@ public final class StructureUtils {
         };
     }
 
-    public static void placeStructure(ServerLevel level, BlockPos origin, String nbtPath, Rotation rotation, boolean mirrorX, boolean mirrorZ) {
-        placeStructureInternal(level, origin, nbtPath, rotation, mirrorX, mirrorZ, false);
+    public static boolean placeStructure(ServerLevel level, BlockPos origin, String nbtPath, Rotation rotation, boolean mirrorX, boolean mirrorZ) {
+        return placeStructureInternal(level, origin, nbtPath, rotation, mirrorX, mirrorZ, false);
     }
 
-    public static void placeStructureUsingOriginPivot(ServerLevel level, BlockPos origin, String nbtPath, Rotation rotation, boolean mirrorX, boolean mirrorZ) {
-        placeStructureInternal(level, origin, nbtPath, rotation, mirrorX, mirrorZ, true);
+    public static boolean placeStructureUsingOriginPivot(ServerLevel level, BlockPos origin, String nbtPath, Rotation rotation, boolean mirrorX, boolean mirrorZ) {
+        return placeStructureInternal(level, origin, nbtPath, rotation, mirrorX, mirrorZ, true);
     }
 
-    private static void placeStructureInternal(
+    private static boolean placeStructureInternal(
             ServerLevel level,
             BlockPos origin,
             String nbtPath,
@@ -71,7 +71,7 @@ public final class StructureUtils {
         ResourceLocation location = ResourceLocation.tryParse(nbtPath);
         if (location == null) {
             LOGGER.error("Error: [PLACE] Invalid resource location: {}", nbtPath);
-            return;
+            return false;
         }
 
         Optional<StructureTemplate> templateOpt = StructureCache.get(location);
@@ -88,13 +88,13 @@ public final class StructureUtils {
                 templateOpt = StructureCache.get(location);
             } else {
                 LOGGER.error("Error: [PLACE] CRITICAL: No valid structure found in category {} for {}. This will result in an empty area!", cat, nbtPath);
-                return;
+                return false;
             }
         }
 
         if (templateOpt.isEmpty()) {
             LOGGER.error("Error: [PLACE] CRITICAL: Fallback also failed to load for: {}. Area will remain empty.", nbtPath);
-            return;
+            return false;
         }
 
         StructureTemplate template = templateOpt.get();
@@ -122,5 +122,6 @@ public final class StructureUtils {
             LevelChunk chunk = level.getChunkAt(origin);
             chunk.setUnsaved(true);
         }
+        return true;
     }
 }

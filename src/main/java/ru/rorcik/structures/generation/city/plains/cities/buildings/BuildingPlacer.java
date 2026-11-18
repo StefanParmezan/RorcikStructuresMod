@@ -133,20 +133,21 @@ public class BuildingPlacer {
         StructureUtils.placeStructure(level, compensated, nbtPath, slot.rotation(), false, false);
     }
 
-    public static void placeBuildingShell(ServerLevel level, BuildingSlot slot) {
+    public static boolean placeBuildingShell(ServerLevel level, BuildingSlot slot) {
         if ("houses".equals(slot.category())) {
-            placeHouseShell(level, slot);
+            return placeHouseShell(level, slot);
         } else {
             placeBuilding(level, slot);
+            return true;
         }
     }
 
-    private static void placeHouseShell(ServerLevel level, BuildingSlot slot) {
+    private static boolean placeHouseShell(ServerLevel level, BuildingSlot slot) {
         String houseType = slot.buildingName().toLowerCase();
         HouseConfig config = HouseConfigLoader.getConfig(houseType);
         if (config == null) {
             LOGGER.error("Error: [PLACE] House config not found for: {}", houseType);
-            return;
+            return false;
         }
 
         long uniqueSeed = level.getSeed() ^ slot.position().hashCode();
@@ -160,7 +161,7 @@ public class BuildingPlacer {
                 houseOrigin, slot.rotation(), config.size()[0], config.size()[2]
         );
 
-        StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseNbt), slot.rotation(), false, false);
+        return StructureUtils.placeStructure(level, housePlacementOrigin, ModPaths.houseNbtPath(houseNbt), slot.rotation(), false, false);
     }
 
     public static void placeHouseRoomsOnly(ServerLevel level, BuildingSlot slot, RandomSource random) {
